@@ -57,5 +57,4 @@ backend/prisma/migrations/migration_lock.toml
 docker-compose.override.yml
 
 # Project documents not for GitHub
-Skincare_Ecommerce_Platform_SRS_v1.1.docx
-*SRS*.docx
+SRS.docx

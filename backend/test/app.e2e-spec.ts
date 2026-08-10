@@ -20,7 +20,11 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/')
       .expect(200)
-      .expect('Hello World!');
+      .expect(({ text }) => {
+        expect(text).toMatch(
+          /^Success \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+        );
+      });
   });
 
   afterEach(async () => {
