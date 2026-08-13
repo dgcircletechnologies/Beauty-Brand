@@ -58,3 +58,4 @@ docker-compose.override.yml
 
 # Project documents not for GitHub
 SRS.docx
+*.docx

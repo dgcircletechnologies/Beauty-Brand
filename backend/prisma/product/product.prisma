@@ -1,0 +1,40 @@
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Product {
+  id String @id @default(cuid())
+
+  // Basic information
+  name             String
+  slug             String  @unique
+  shortDescription String?
+  description      String?
+
+  // Product content
+  benefits          String?
+  usageInstructions String?
+  ingredientsText   String?
+  warnings          String?
+
+  // Publishing
+  status      ProductStatus @default(DRAFT)
+  isFeatured  Boolean       @default(false)
+  publishedAt DateTime?
+
+  // Soft delete
+  deletedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  categories ProductCategory[]
+  variants   ProductVariant[]
+
+  @@index([status])
+  @@index([isFeatured])
+}

@@ -1,0 +1,27 @@
+enum AttributeScope {
+  PRODUCT
+  VARIANT
+}
+
+model CategoryAttribute {
+  categoryId  String
+  attributeId String
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  attribute AttributeDefinition @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  // How this attribute behaves for this category
+  scope        AttributeScope
+  isRequired   Boolean        @default(false)
+  isFilterable Boolean        @default(false)
+
+  // Display order in admin/product forms
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@id([categoryId, attributeId])
+  @@index([attributeId])
+  @@index([categoryId, sortOrder])
+}

@@ -1,0 +1,34 @@
+model Category {
+  id String @id @default(cuid())
+
+  // Basic information
+  name        String
+  slug        String  @unique
+  description String?
+
+  // Category hierarchy
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+
+  // Presentation
+  imageUrl  String?
+  sortOrder Int     @default(0)
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Soft delete
+  deletedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  //Relations
+  products   ProductCategory[]
+  attributes CategoryAttribute[]
+
+  @@index([parentId])
+  @@index([isActive])
+}
