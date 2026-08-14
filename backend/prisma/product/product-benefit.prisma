@@ -1,0 +1,16 @@
+model ProductBenefit {
+  productId String
+  benefitId String
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  benefit Benefit @relation(fields: [benefitId], references: [id], onDelete: Restrict)
+
+  // Same benefit cannot be assigned twice to a product
+  @@id([productId, benefitId])
+  // Useful for filtering products by benefit
+  @@index([benefitId])
+}

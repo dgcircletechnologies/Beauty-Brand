@@ -26,8 +26,10 @@ model Category {
   updatedAt DateTime @updatedAt
 
   //Relations
-  products   ProductCategory[]
-  attributes CategoryAttribute[]
+  products           ProductCategory[]
+  attributes         CategoryAttribute[]
+  ancestorClosures   CategoryClosure[]   @relation("CategoryClosureAncestor")
+  descendantClosures CategoryClosure[]   @relation("CategoryClosureDescendant")
 
   @@index([parentId])
   @@index([isActive])

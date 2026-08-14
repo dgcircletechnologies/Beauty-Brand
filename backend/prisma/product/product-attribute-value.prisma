@@ -1,0 +1,28 @@
+model ProductAttributeValue {
+  id String @id @default(cuid())
+
+  // Relations
+  productId   String
+  attributeId String
+  optionId    String?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  attribute AttributeDefinition @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  option AttributeOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  // Actual typed values
+  textValue    String?
+  numberValue  Decimal? @db.Decimal(12, 4)
+  booleanValue Boolean?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([attributeId])
+  @@index([optionId])
+  @@index([productId, attributeId])
+}

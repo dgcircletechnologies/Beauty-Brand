@@ -1,0 +1,38 @@
+enum HairProfileType {
+  TEXTURE
+  CONDITION
+  SCALP_TYPE
+}
+
+model HairProfile {
+  id String @id @default(cuid())
+
+  // Basic information
+  name        String
+  slug        String  @unique
+  description String?
+
+  // Distinguishes hair texture, hair condition and scalp profile
+  type HairProfileType
+
+  // Presentation
+  sortOrder Int @default(0)
+
+  // Administration
+  isActive Boolean @default(true)
+
+  // Soft delete / archive
+  deletedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  products ProductHairProfile[]
+
+  @@index([type])
+  @@index([name])
+  @@index([isActive])
+  @@index([type, sortOrder])
+}

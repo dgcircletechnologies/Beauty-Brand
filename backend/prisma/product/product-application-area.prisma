@@ -1,0 +1,17 @@
+model ProductApplicationArea {
+  productId         String
+  applicationAreaId String
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  applicationArea ApplicationArea @relation(fields: [applicationAreaId], references: [id], onDelete: Restrict)
+
+  // Same application area cannot be assigned
+  // twice to the same product
+  @@id([productId, applicationAreaId])
+  // Useful for filtering all products by application area
+  @@index([applicationAreaId])
+}

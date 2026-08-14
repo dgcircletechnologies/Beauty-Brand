@@ -32,8 +32,20 @@ model Product {
   updatedAt DateTime @updatedAt
 
   // Relations
-  categories ProductCategory[]
-  variants   ProductVariant[]
+  categories       ProductCategory[]
+  variants         ProductVariant[]
+  attributes       ProductAttributeValue[]
+  images           ProductImage[]
+  ingredients      ProductIngredient[]
+  audiences        ProductAudience[]
+  applicationAreas ProductApplicationArea[]
+  skinTypes        ProductSkinType[]
+  ageGroups        ProductAgeGroup[]
+  hairProfiles     ProductHairProfile[]
+  concerns         ProductConcern[]
+  productBenefits  ProductBenefit[]
+  tags             ProductTag[]
+  collections      CollectionProduct[]
 
   @@index([status])
   @@index([isFeatured])

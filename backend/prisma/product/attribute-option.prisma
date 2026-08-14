@@ -1,0 +1,25 @@
+model AttributeOption {
+  id                    String @id @default(cuid())
+  attributeDefinitionId String
+
+  label     String
+  value     String
+  sortOrder Int    @default(0)
+
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attributeDefinition AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
+
+  // Relations
+  attributeValues        ProductAttributeValue[]
+  variantAttributeValues VariantAttributeValue[]
+
+  @@unique([attributeDefinitionId, value])
+  @@index([attributeDefinitionId])
+  @@index([attributeDefinitionId, isActive])
+  @@index([attributeDefinitionId, sortOrder])
+}

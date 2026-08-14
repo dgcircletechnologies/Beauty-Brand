@@ -1,0 +1,28 @@
+model Concern {
+  id String @id @default(cuid())
+
+  // Basic information
+  name        String
+  slug        String  @unique
+  description String?
+
+  // Presentation
+  sortOrder Int @default(0)
+
+  // Administration
+  isActive Boolean @default(true)
+
+  // Soft delete / archive
+  deletedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  products ProductConcern[]
+
+  @@index([name])
+  @@index([isActive])
+  @@index([sortOrder])
+}

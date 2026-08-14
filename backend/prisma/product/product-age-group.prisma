@@ -1,0 +1,16 @@
+model ProductAgeGroup {
+  productId  String
+  ageGroupId String
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  ageGroup AgeGroup @relation(fields: [ageGroupId], references: [id], onDelete: Restrict)
+
+  // Same age group cannot be assigned twice to a product
+  @@id([productId, ageGroupId])
+  // Useful for filtering products by age group
+  @@index([ageGroupId])
+}

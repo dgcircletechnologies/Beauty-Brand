@@ -1,0 +1,32 @@
+model AgeGroup {
+  id String @id @default(cuid())
+
+  // Basic information
+  name        String
+  slug        String  @unique
+  description String?
+
+  // Optional numeric boundaries for recommendation/filter logic
+  minAge Int?
+  maxAge Int?
+
+  // Presentation
+  sortOrder Int @default(0)
+
+  // Administration
+  isActive Boolean @default(true)
+
+  // Soft delete / archive
+  deletedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  products ProductAgeGroup[]
+
+  @@index([name])
+  @@index([isActive])
+  @@index([sortOrder])
+}

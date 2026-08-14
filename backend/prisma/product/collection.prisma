@@ -1,0 +1,35 @@
+model Collection {
+  id String @id @default(cuid())
+
+  // Basic information
+  name        String
+  slug        String  @unique
+  description String?
+
+  // Optional collection artwork/banner
+  imageUrl String?
+
+  // Presentation
+  sortOrder Int @default(0)
+
+  // Optional campaign window
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  // Administration
+  isActive Boolean @default(true)
+
+  // Soft delete / archive
+  deletedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  products CollectionProduct[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+  @@index([startsAt, endsAt])
+}

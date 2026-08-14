@@ -28,7 +28,10 @@ model AttributeDefinition {
   updatedAt DateTime @updatedAt
 
   // Relations
-  categoryAttributes CategoryAttribute[]
+  categoryAttributes     CategoryAttribute[]
+  attributeOptions       AttributeOption[]
+  attributeValues        ProductAttributeValue[]
+  variantAttributeValues VariantAttributeValue[]
 
   @@index([isActive])
 }

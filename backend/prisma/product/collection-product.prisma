@@ -1,0 +1,19 @@
+model CollectionProduct {
+  collectionId String
+  productId    String
+
+  // Controls product order inside a collection
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Same product cannot be added twice to a collection
+  @@id([collectionId, productId])
+  @@index([productId])
+  @@index([collectionId, sortOrder])
+}
