@@ -1,0 +1,17 @@
+model ExchangeRate {
+  id                String    @id @default(cuid())
+  baseCurrencyCode  String    @db.Char(3)
+  quoteCurrencyCode String    @db.Char(3)
+  rate              Decimal   @db.Decimal(20, 8)
+  provider          String
+  effectiveAt       DateTime
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+
+  baseCurrency  Currency @relation("ExchangeRateBaseCurrency", fields: [baseCurrencyCode], references: [code], onDelete: Restrict)
+  quoteCurrency Currency @relation("ExchangeRateQuoteCurrency", fields: [quoteCurrencyCode], references: [code], onDelete: Restrict)
+
+  @@unique([baseCurrencyCode, quoteCurrencyCode, effectiveAt])
+  @@index([baseCurrencyCode, quoteCurrencyCode, effectiveAt])
+  @@index([expiresAt])
+}

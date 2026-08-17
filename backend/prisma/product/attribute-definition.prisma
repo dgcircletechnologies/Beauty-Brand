@@ -1,36 +1,17 @@
-enum AttributeDataType {
-  TEXT
-  NUMBER
-  BOOLEAN
-  SELECT
-  MULTI_SELECT
-}
-
 model AttributeDefinition {
-  id String @id @default(cuid())
-
-  // Basic definition
+  id          String            @id @default(cuid())
   name        String
-  slug        String  @unique
+  slug        String            @unique
   description String?
+  dataType    AttributeDataType
+  isActive    Boolean           @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
-  // Defines what type of value this attribute accepts
-  dataType AttributeDataType
-
-  // Administration
-  isActive Boolean @default(true)
-
-  // Soft delete
-  deletedAt DateTime?
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  categoryAttributes     CategoryAttribute[]
   attributeOptions       AttributeOption[]
-  attributeValues        ProductAttributeValue[]
+  categoryAttributes     CategoryAttribute[]
+  productAttributeValues ProductAttributeValue[]
   variantAttributeValues VariantAttributeValue[]
 
   @@index([isActive])

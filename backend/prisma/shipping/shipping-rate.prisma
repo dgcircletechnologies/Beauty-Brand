@@ -1,0 +1,26 @@
+model ShippingRate {
+  id               String                  @id @default(cuid())
+  zoneId           String
+  name             String
+  serviceCode      String?
+  calculation      ShippingRateCalculation @default(FLAT)
+  amount           Decimal                 @db.Decimal(12, 2)
+  currencyCode     String                  @db.Char(3)
+  minOrderAmount   Decimal?                @db.Decimal(12, 2)
+  maxOrderAmount   Decimal?                @db.Decimal(12, 2)
+  minWeight        Decimal?                @db.Decimal(12, 3)
+  maxWeight        Decimal?                @db.Decimal(12, 3)
+  estimatedDaysMin Int?
+  estimatedDaysMax Int?
+  isActive         Boolean                 @default(true)
+  deletedAt        DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  zone     ShippingZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  currency Currency     @relation(fields: [currencyCode], references: [code], onDelete: Restrict)
+  orders   Order[]
+
+  @@index([zoneId, isActive])
+  @@index([currencyCode])
+}

@@ -1,0 +1,21 @@
+model Currency {
+  code          String         @id @db.Char(3)
+  name          String
+  symbol        String?
+  decimalDigits Int            @default(2)
+  status        CurrencyStatus @default(ACTIVE)
+  isBase        Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  baseRates       ExchangeRate[]       @relation("ExchangeRateBaseCurrency")
+  quoteRates      ExchangeRate[]       @relation("ExchangeRateQuoteCurrency")
+  carts           Cart[]
+  shippingRates   ShippingRate[]
+  ordersAsBase    Order[]              @relation("OrderBaseCurrency")
+  ordersAsDisplay Order[]              @relation("OrderDisplayCurrency")
+  payments        PaymentTransaction[]
+
+  @@index([status])
+  @@index([isBase])
+}

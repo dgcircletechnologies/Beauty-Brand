@@ -1,0 +1,11 @@
+model UserAvoidedIngredient {
+  profileId    String
+  ingredientId String
+  createdAt    DateTime @default(now())
+
+  profile    UserPreferenceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  ingredient Ingredient            @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@id([profileId, ingredientId])
+  @@index([ingredientId])
+}

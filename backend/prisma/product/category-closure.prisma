@@ -1,24 +1,12 @@
 model CategoryClosure {
   ancestorId   String
   descendantId String
+  depth        Int
 
-  // 0 = same category
-  // 1 = direct child
-  // 2 = grandchild
-  // etc.
-  depth Int
-
-  // Relations
-  ancestor Category @relation("CategoryClosureAncestor", fields: [ancestorId], references: [id], onDelete: Cascade)
-
+  ancestor   Category @relation("CategoryClosureAncestor", fields: [ancestorId], references: [id], onDelete: Cascade)
   descendant Category @relation("CategoryClosureDescendant", fields: [descendantId], references: [id], onDelete: Cascade)
 
-  // A category pair should exist only once
   @@id([ancestorId, descendantId])
-  // Useful for:
-  // "give me all descendants of this category"
   @@index([ancestorId, depth])
-  // Useful for:
-  // "give me all ancestors of this category"
   @@index([descendantId, depth])
 }

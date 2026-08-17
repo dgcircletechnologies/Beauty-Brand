@@ -1,16 +1,11 @@
 model ProductSkinType {
   productId  String
   skinTypeId String
+  createdAt  DateTime @default(now())
 
-  createdAt DateTime @default(now())
-
-  // Relations
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   skinType SkinType @relation(fields: [skinTypeId], references: [id], onDelete: Restrict)
 
-  // Same skin type cannot be assigned twice to a product
   @@id([productId, skinTypeId])
-  // Useful for filtering products by skin type
   @@index([skinTypeId])
 }

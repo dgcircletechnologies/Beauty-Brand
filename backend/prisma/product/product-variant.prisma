@@ -1,25 +1,26 @@
 model ProductVariant {
-  id String @id @default(cuid())
+  id             String    @id @default(cuid())
+  productId      String
+  sku            String    @unique
+  price          Decimal   @db.Decimal(10, 2)
+  compareAtPrice Decimal?  @db.Decimal(10, 2)
+  stockQuantity  Int       @default(0)
+  isActive       Boolean   @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  sku String @unique
+  attributeValues       VariantAttributeValue[]
+  images                ProductImage[]
+  cartItems             CartItem[]
+  orderItems            OrderItem[]
+  inventoryReservations InventoryReservation[]
+  inventoryMovements    InventoryMovement[]
 
-  name String?
-
-  price Decimal @db.Decimal(12, 2)
-
-  stockQuantity Int @default(0)
-
-  isActive Boolean @default(true)
-
-  sortOrder Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  attributeValues VariantAttributeValue[]
-  images          ProductImage[]
+  @@index([productId])
+  @@index([isActive])
+  @@index([productId, isActive])
+  @@index([stockQuantity])
 }

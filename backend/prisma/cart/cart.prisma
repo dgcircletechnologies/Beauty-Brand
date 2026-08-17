@@ -1,0 +1,16 @@
+model Cart {
+  id           String     @id @default(cuid())
+  userId       String
+  currencyCode String     @db.Char(3)
+  status       CartStatus @default(ACTIVE)
+  expiresAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency Currency   @relation(fields: [currencyCode], references: [code], onDelete: Restrict)
+  items    CartItem[]
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+}

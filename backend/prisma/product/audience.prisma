@@ -1,23 +1,15 @@
 model Audience {
-  id String @id @default(cuid())
-
-  // Basic information
+  id          String    @id @default(cuid())
   name        String
-  slug        String  @unique
+  slug        String    @unique
   description String?
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  // Administration
-  isActive Boolean @default(true)
-
-  // Soft delete / archive
-  deletedAt DateTime?
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  products ProductAudience[]
+  products           ProductAudience[]
+  preferenceProfiles UserPreferenceAudience[]
 
   @@index([name])
   @@index([isActive])

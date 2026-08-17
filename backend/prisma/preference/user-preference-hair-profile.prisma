@@ -1,0 +1,12 @@
+model UserPreferenceHairProfile {
+  profileId     String
+  hairProfileId String
+  priority      Int      @default(1)
+  createdAt     DateTime @default(now())
+
+  profile     UserPreferenceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  hairProfile HairProfile           @relation(fields: [hairProfileId], references: [id], onDelete: Restrict)
+
+  @@id([profileId, hairProfileId])
+  @@index([hairProfileId])
+}

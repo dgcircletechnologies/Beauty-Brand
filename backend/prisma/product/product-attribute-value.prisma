@@ -1,25 +1,17 @@
 model ProductAttributeValue {
-  id String @id @default(cuid())
-
-  // Relations
-  productId   String
-  attributeId String
-  optionId    String?
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  attribute AttributeDefinition @relation(fields: [attributeId], references: [id], onDelete: Cascade)
-
-  option AttributeOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
-
-  // Actual typed values
+  id           String   @id @default(cuid())
+  productId    String
+  attributeId  String
+  optionId     String?
   textValue    String?
   numberValue  Decimal? @db.Decimal(12, 4)
   booleanValue Boolean?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  product   Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attribute AttributeDefinition @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  option    AttributeOption?    @relation(fields: [optionId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@index([attributeId])

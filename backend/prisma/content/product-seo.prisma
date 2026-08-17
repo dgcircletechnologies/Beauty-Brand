@@ -1,0 +1,13 @@
+model ProductSeo {
+  id             String   @id @default(cuid())
+  productId      String   @unique
+  title          String?
+  description    String?
+  canonicalUrl   String?
+  noIndex        Boolean  @default(false)
+  structuredData Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}

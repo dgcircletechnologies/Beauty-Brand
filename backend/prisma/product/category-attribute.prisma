@@ -1,27 +1,18 @@
-enum AttributeScope {
-  PRODUCT
-  VARIANT
-}
-
 model CategoryAttribute {
-  categoryId  String
-  attributeId String
+  id                    String   @id @default(cuid())
+  categoryId            String
+  attributeDefinitionId String
+  isRequired            Boolean  @default(false)
+  isVariantAttribute    Boolean  @default(false)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category            Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  attributeDefinition AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
 
-  attribute AttributeDefinition @relation(fields: [attributeId], references: [id], onDelete: Cascade)
-
-  // How this attribute behaves for this category
-  scope        AttributeScope
-  isRequired   Boolean        @default(false)
-  isFilterable Boolean        @default(false)
-
-  // Display order in admin/product forms
-  sortOrder Int @default(0)
-
-  createdAt DateTime @default(now())
-
-  @@id([categoryId, attributeId])
-  @@index([attributeId])
+  @@unique([categoryId, attributeDefinitionId])
   @@index([categoryId, sortOrder])
+  @@index([attributeDefinitionId])
+  @@index([categoryId, isVariantAttribute])
 }

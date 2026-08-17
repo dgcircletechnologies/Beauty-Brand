@@ -1,0 +1,21 @@
+model OrderAddressSnapshot {
+  id              String           @id @default(cuid())
+  orderId         String
+  type            OrderAddressType
+  firstName       String
+  lastName        String
+  company         String?
+  line1           String
+  line2           String?
+  city            String
+  stateOrProvince String?
+  postalCode      String
+  countryCode     String           @db.Char(2)
+  phone           String?
+  createdAt       DateTime         @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, type])
+  @@index([countryCode])
+}

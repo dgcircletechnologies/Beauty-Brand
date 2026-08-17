@@ -1,35 +1,20 @@
 model Collection {
-  id String @id @default(cuid())
-
-  // Basic information
+  id          String    @id @default(cuid())
   name        String
-  slug        String  @unique
+  slug        String    @unique
   description String?
+  imageUrl    String?
+  isFeatured  Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  // Optional collection artwork/banner
-  imageUrl String?
-
-  // Presentation
-  sortOrder Int @default(0)
-
-  // Optional campaign window
-  startsAt DateTime?
-  endsAt   DateTime?
-
-  // Administration
-  isActive Boolean @default(true)
-
-  // Soft delete / archive
-  deletedAt DateTime?
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
   products CollectionProduct[]
 
   @@index([isActive])
-  @@index([sortOrder])
+  @@index([isFeatured])
   @@index([startsAt, endsAt])
 }

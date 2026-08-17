@@ -1,0 +1,22 @@
+model CancellationRequest {
+  id                String                    @id @default(cuid())
+  orderId           String
+  requestedByUserId String
+  reason            String
+  details           String?
+  status            CancellationRequestStatus @default(PENDING)
+  decidedByUserId   String?
+  decisionNote      String?
+  requestedAt       DateTime                  @default(now())
+  decidedAt         DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  order       Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  requestedBy User  @relation("CancellationRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  decidedBy   User? @relation("CancellationDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, status])
+  @@index([requestedByUserId, requestedAt])
+  @@index([status, requestedAt])
+}

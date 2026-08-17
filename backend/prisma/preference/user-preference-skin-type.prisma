@@ -1,0 +1,12 @@
+model UserPreferenceSkinType {
+  profileId  String
+  skinTypeId String
+  priority   Int      @default(1)
+  createdAt  DateTime @default(now())
+
+  profile  UserPreferenceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skinType SkinType              @relation(fields: [skinTypeId], references: [id], onDelete: Restrict)
+
+  @@id([profileId, skinTypeId])
+  @@index([skinTypeId])
+}

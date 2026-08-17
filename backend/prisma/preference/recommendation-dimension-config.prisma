@@ -1,0 +1,12 @@
+model RecommendationDimensionConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  description String?
+  weight      Decimal  @default(1) @db.Decimal(8, 4)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+}

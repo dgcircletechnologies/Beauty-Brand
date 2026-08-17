@@ -1,0 +1,14 @@
+model ShippingZone {
+  id        String    @id @default(cuid())
+  name      String
+  code      String    @unique
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  countries ZoneCountry[]
+  rates     ShippingRate[]
+
+  @@index([isActive])
+}

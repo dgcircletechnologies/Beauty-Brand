@@ -1,0 +1,11 @@
+model UserPreferenceAudience {
+  profileId  String
+  audienceId String
+  createdAt  DateTime @default(now())
+
+  profile  UserPreferenceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  audience Audience              @relation(fields: [audienceId], references: [id], onDelete: Restrict)
+
+  @@id([profileId, audienceId])
+  @@index([audienceId])
+}

@@ -1,0 +1,13 @@
+model UserPreferenceConcern {
+  profileId String
+  concernId String
+  priority  Int      @default(1)
+  createdAt DateTime @default(now())
+
+  profile UserPreferenceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  concern Concern               @relation(fields: [concernId], references: [id], onDelete: Restrict)
+
+  @@id([profileId, concernId])
+  @@index([concernId])
+  @@index([profileId, priority])
+}

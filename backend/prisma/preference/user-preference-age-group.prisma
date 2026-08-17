@@ -1,0 +1,11 @@
+model UserPreferenceAgeGroup {
+  profileId  String
+  ageGroupId String
+  createdAt  DateTime @default(now())
+
+  profile  UserPreferenceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  ageGroup AgeGroup              @relation(fields: [ageGroupId], references: [id], onDelete: Restrict)
+
+  @@id([profileId, ageGroupId])
+  @@index([ageGroupId])
+}

@@ -1,0 +1,25 @@
+model PaymentTransaction {
+  id                    String                 @id @default(cuid())
+  orderId               String
+  type                  PaymentTransactionType @default(PAYMENT)
+  provider              String
+  providerTransactionId String?
+  providerIntentId      String?
+  idempotencyKey        String                 @unique
+  status                PaymentStatus          @default(PENDING)
+  amount                Decimal                @db.Decimal(12, 2)
+  currencyCode          String                 @db.Char(3)
+  failureCode           String?
+  failureReason         String?
+  metadata              Json?
+  processedAt           DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  currency Currency @relation(fields: [currencyCode], references: [code], onDelete: Restrict)
+
+  @@index([orderId, status])
+  @@index([provider, providerIntentId])
+  @@index([status, createdAt])
+}

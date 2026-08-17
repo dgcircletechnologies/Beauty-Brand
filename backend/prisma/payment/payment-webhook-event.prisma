@@ -1,0 +1,14 @@
+model PaymentWebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String
+  providerEventId String
+  eventType       String
+  payloadHash     String?
+  processedAt     DateTime?
+  processingError String?
+  receivedAt      DateTime  @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([provider, receivedAt])
+  @@index([processedAt])
+}

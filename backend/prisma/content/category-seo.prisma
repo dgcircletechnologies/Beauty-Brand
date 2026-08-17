@@ -1,0 +1,13 @@
+model CategorySeo {
+  id             String   @id @default(cuid())
+  categoryId     String   @unique
+  title          String?
+  description    String?
+  canonicalUrl   String?
+  noIndex        Boolean  @default(false)
+  structuredData Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}

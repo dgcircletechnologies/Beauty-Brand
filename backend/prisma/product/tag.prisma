@@ -1,28 +1,14 @@
 model Tag {
-  id String @id @default(cuid())
-
-  // Basic information
-  name        String
-  slug        String  @unique
-  description String?
-
-  // Presentation
-  sortOrder Int @default(0)
-
-  // Administration
-  isActive Boolean @default(true)
-
-  // Soft delete / archive
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  isActive  Boolean   @default(true)
   deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
   products ProductTag[]
 
   @@index([name])
   @@index([isActive])
-  @@index([sortOrder])
 }

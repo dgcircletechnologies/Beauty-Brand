@@ -1,28 +1,16 @@
 model Concern {
-  id String @id @default(cuid())
-
-  // Basic information
+  id          String    @id @default(cuid())
   name        String
-  slug        String  @unique
+  slug        String    @unique
   description String?
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  // Presentation
-  sortOrder Int @default(0)
-
-  // Administration
-  isActive Boolean @default(true)
-
-  // Soft delete / archive
-  deletedAt DateTime?
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  products ProductConcern[]
+  products           ProductConcern[]
+  preferenceProfiles UserPreferenceConcern[]
 
   @@index([name])
   @@index([isActive])
-  @@index([sortOrder])
 }

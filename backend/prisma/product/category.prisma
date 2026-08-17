@@ -1,36 +1,26 @@
 model Category {
-  id String @id @default(cuid())
-
-  // Basic information
+  id          String    @id @default(cuid())
   name        String
-  slug        String  @unique
+  slug        String    @unique
   description String?
+  parentId    String?
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  // Category hierarchy
-  parentId String?
-  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryHierarchy")
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
 
-  // Presentation
-  imageUrl  String?
-  sortOrder Int     @default(0)
+  products   ProductCategory[]
+  attributes CategoryAttribute[]
 
-  // Status
-  isActive Boolean @default(true)
+  ancestorLinks   CategoryClosure[] @relation("CategoryClosureAncestor")
+  descendantLinks CategoryClosure[] @relation("CategoryClosureDescendant")
 
-  // Soft delete
-  deletedAt DateTime?
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  //Relations
-  products           ProductCategory[]
-  attributes         CategoryAttribute[]
-  ancestorClosures   CategoryClosure[]   @relation("CategoryClosureAncestor")
-  descendantClosures CategoryClosure[]   @relation("CategoryClosureDescendant")
+  seo CategorySeo?
 
   @@index([parentId])
   @@index([isActive])
+  @@index([deletedAt])
 }

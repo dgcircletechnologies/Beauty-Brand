@@ -1,16 +1,11 @@
 model ProductConcern {
   productId String
   concernId String
-
   createdAt DateTime @default(now())
 
-  // Relations
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
   concern Concern @relation(fields: [concernId], references: [id], onDelete: Restrict)
 
-  // Same concern cannot be assigned twice to a product
   @@id([productId, concernId])
-  // Useful for filtering products by concern
   @@index([concernId])
 }

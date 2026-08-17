@@ -1,0 +1,13 @@
+model ZoneCountry {
+  id          String   @id @default(cuid())
+  zoneId      String
+  countryCode String   @unique @db.Char(2)
+  countryName String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  zone ShippingZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@index([zoneId, isActive])
+}

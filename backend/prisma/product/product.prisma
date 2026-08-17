@@ -1,52 +1,41 @@
-enum ProductStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
-}
-
 model Product {
-  id String @id @default(cuid())
-
-  // Basic information
-  name             String
-  slug             String  @unique
-  shortDescription String?
-  description      String?
-
-  // Product content
+  id                String        @id @default(cuid())
+  name              String
+  slug              String        @unique
+  shortDescription  String?
+  description       String?
   benefits          String?
   usageInstructions String?
   ingredientsText   String?
   warnings          String?
+  status            ProductStatus @default(DRAFT)
+  isFeatured        Boolean       @default(false)
+  publishedAt       DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
-  // Publishing
-  status      ProductStatus @default(DRAFT)
-  isFeatured  Boolean       @default(false)
-  publishedAt DateTime?
+  categories      ProductCategory[]
+  variants        ProductVariant[]
+  attributeValues ProductAttributeValue[]
+  images          ProductImage[]
+  ingredients     ProductIngredient[]
+  audiences       ProductAudience[]
+  skinTypes       ProductSkinType[]
+  ageGroups       ProductAgeGroup[]
+  hairProfiles    ProductHairProfile[]
+  concerns        ProductConcern[]
+  productBenefits ProductBenefit[]
+  tags            ProductTag[]
+  collections     CollectionProduct[]
 
-  // Soft delete
-  deletedAt DateTime?
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  categories       ProductCategory[]
-  variants         ProductVariant[]
-  attributes       ProductAttributeValue[]
-  images           ProductImage[]
-  ingredients      ProductIngredient[]
-  audiences        ProductAudience[]
-  applicationAreas ProductApplicationArea[]
-  skinTypes        ProductSkinType[]
-  ageGroups        ProductAgeGroup[]
-  hairProfiles     ProductHairProfile[]
-  concerns         ProductConcern[]
-  productBenefits  ProductBenefit[]
-  tags             ProductTag[]
-  collections      CollectionProduct[]
+  wishlistItems WishlistItem[]
+  reviews       Review[]
+  orderItems    OrderItem[]
+  seo           ProductSeo?
 
   @@index([status])
   @@index([isFeatured])
+  @@index([deletedAt])
+  @@index([status, publishedAt])
 }

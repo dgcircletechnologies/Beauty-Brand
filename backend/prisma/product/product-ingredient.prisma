@@ -1,36 +1,17 @@
 model ProductIngredient {
-  productId    String
-  ingredientId String
+  productId       String
+  ingredientId    String
+  purpose         String?
+  concentration   String?
+  isKeyIngredient Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  // Position in the product's ingredient list
-  // Lower number = shown earlier
-  sortOrder Int @default(0)
-
-  // Used for highlighted ingredients such as
-  // "Powered by 5% Niacinamide"
-  isKeyIngredient Boolean @default(false)
-
-  // Optional concentration percentage when disclosed
-  // Example: 5.00 means 5%
-  concentrationPercent Decimal? @db.Decimal(5, 2)
-
-  // Optional product-specific note
-  // Example: "Derived from sugarcane"
-  note String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
 
-  // Same ingredient should not be attached twice
-  // to the same product
   @@id([productId, ingredientId])
-  @@index([productId, sortOrder])
   @@index([ingredientId])
-  @@index([ingredientId, productId])
-  @@index([productId, isKeyIngredient])
+  @@index([productId, sortOrder])
 }

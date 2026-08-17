@@ -1,28 +1,18 @@
 model Ingredient {
-  id String @id @default(cuid())
-
-  // Basic information
-  name String
-  slug String @unique
-
-  // Standard cosmetic ingredient name (INCI)
-  inciName String?
-
-  // Customer/admin-facing explanation
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  inciName    String?
   description String?
+  benefits    String?
+  warnings    String?
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  // Administration
-  isActive Boolean @default(true)
-
-  // Soft delete / archive
-  deletedAt DateTime?
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  products ProductIngredient[]
+  products  ProductIngredient[]
+  avoidedBy UserAvoidedIngredient[]
 
   @@index([name])
   @@index([isActive])

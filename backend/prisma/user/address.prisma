@@ -1,39 +1,27 @@
 model Address {
-  id String @id @default(cuid())
+  id                String    @id @default(cuid())
+  userId            String
+  label             String?
+  firstName         String
+  lastName          String
+  company           String?
+  line1             String
+  line2             String?
+  city              String
+  stateOrProvince   String?
+  postalCode        String
+  countryCode       String    @db.Char(2)
+  phone             String?
+  isDefaultShipping Boolean   @default(false)
+  isDefaultBilling  Boolean   @default(false)
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  // Owner
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Optional user-defined name
-  label String?
-
-  // Recipient information
-  recipientName String
-  phone         String?
-
-  // Address
-  addressLine1 String
-  addressLine2 String?
-
-  city          String
-  stateProvince String?
-  postalCode    String?
-
-  // ISO country code such as IN, US, GB
-  countryCode String @db.Char(2)
-
-  // Address preferences
-  isDefaultShipping Boolean @default(false)
-  isDefaultBilling  Boolean @default(false)
-
-  // Soft deletion
-  deletedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, isDefaultShipping])
   @@index([userId, isDefaultBilling])
+  @@index([countryCode])
 }
