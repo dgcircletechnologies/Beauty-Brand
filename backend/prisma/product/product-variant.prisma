@@ -12,12 +12,10 @@ model ProductVariant {
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  attributeValues       VariantAttributeValue[]
-  images                ProductImage[]
-  cartItems             CartItem[]
-  orderItems            OrderItem[]
-  inventoryReservations InventoryReservation[]
-  inventoryMovements    InventoryMovement[]
+  attributeValues VariantAttributeValue[]
+  images          ProductImage[]
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
 
   @@index([productId])
   @@index([isActive])

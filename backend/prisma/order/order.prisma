@@ -30,15 +30,13 @@ model Order {
   displayCurrency Currency      @relation("OrderDisplayCurrency", fields: [displayCurrencyCode], references: [code], onDelete: Restrict)
   shippingRate    ShippingRate? @relation(fields: [shippingRateId], references: [id], onDelete: SetNull)
 
-  items                 OrderItem[]
-  addresses             OrderAddressSnapshot[]
-  payments              PaymentTransaction[]
-  statusHistory         OrderStatusHistory[]
-  shipments             Shipment[]
-  cancellationRequests  CancellationRequest[]
-  inventoryReservations InventoryReservation[]
-  inventoryMovements    InventoryMovement[]
-  notifications         Notification[]
+  items                OrderItem[]
+  addresses            OrderAddressSnapshot[]
+  payments             PaymentTransaction[]
+  statusHistory        OrderStatusHistory[]
+  shipments            Shipment[]
+  cancellationRequests CancellationRequest[]
+  notifications        Notification[]
 
   @@index([userId, createdAt])
   @@index([userId, status])
