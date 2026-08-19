@@ -30,9 +30,12 @@ services:
       DATABASE_URL: postgresql://skincare:skincare@postgres:5432/skincare_db
     ports:
       - "3000:3000"
+    command: sh -c "npm ci && npm run start:dev"
     volumes:
       - ./backend:/app
       - backend_node_modules:/app/node_modules
+      - backend_dist:/app/dist
+      - backend_generated:/app/generated
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,3 +43,5 @@ services:
 volumes:
   postgres_dev_data:
   backend_node_modules:
+  backend_dist:
+  backend_generated:
