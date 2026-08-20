@@ -70,8 +70,13 @@
     "moduleFileExtensions": [
       "js",
       "json",
-      "ts"
+      "ts",
+      "cts"
     ],
+    "moduleNameMapper": {
+      "^(\\.\\./)+generated/prisma/client\\.cjs$": "<rootDir>/test/prisma-client.mock.ts",
+      "^(\\.\\./)+generated/prisma/enums\\.cjs$": "<rootDir>/test/prisma-enums.mock.ts"
+    },
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
