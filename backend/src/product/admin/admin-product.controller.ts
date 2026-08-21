@@ -18,6 +18,12 @@ import { ProductService } from '../product.service';
 export class AdminProductController {
   constructor(private readonly productService: ProductService) {}
 
+  @Get('metadata')
+  @ResponseMessage('Product metadata fetched successfully')
+  findProductMetadata() {
+    return this.productService.findProductMetadata();
+  }
+
   @Post()
   @ResponseMessage('Product created successfully')
   create(@Body() dto: CreateProductDto) {

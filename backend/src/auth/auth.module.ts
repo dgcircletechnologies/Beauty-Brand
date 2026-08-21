@@ -10,6 +10,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ConfigModule } from '@nestjs/config';
 import { AccessTokenMiddleware } from '../common/middleware/access-token.middleware';
+import { RefreshTokenMiddleware } from '../common/middleware/refresh-token.middleware';
 import { CommonModule } from '../common/common.module';
 
 @Module({
@@ -30,11 +31,14 @@ import { CommonModule } from '../common/common.module';
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(AccessTokenMiddleware).forRoutes(
+    consumer.apply(RefreshTokenMiddleware).forRoutes(
       {
         path: 'auth/refresh',
         method: RequestMethod.POST,
       },
+    );
+
+    consumer.apply(AccessTokenMiddleware).forRoutes(
       {
         path: 'auth/logout',
         method: RequestMethod.POST,

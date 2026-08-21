@@ -1,27 +1,25 @@
 import {
   IsBoolean,
-  IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
+  Min,
 } from 'class-validator';
 
-import { ProductStatus } from '../../../generated/prisma/enums.cjs';
-import { ProductRelationsDto } from './product-relations.dto';
-
-export class UpdateProductDto extends ProductRelationsDto {
+export class UpdateProductMetadataDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  @MaxLength(180)
+  @MaxLength(160)
   name?: string;
 
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  @MaxLength(220)
+  @MaxLength(200)
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
     message:
       'slug must contain lowercase letters, numbers, and single hyphens only',
@@ -30,26 +28,36 @@ export class UpdateProductDto extends ProductRelationsDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(300)
-  shortDescription?: string;
-
-  @IsOptional()
-  @IsString()
   description?: string;
 
   @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class UpdateIngredientDto extends UpdateProductMetadataDto {
+  @IsOptional()
   @IsString()
-  usageInstructions?: string;
+  @MaxLength(180)
+  inciName?: string;
+
+  @IsOptional()
+  @IsString()
+  benefits?: string;
 
   @IsOptional()
   @IsString()
   warnings?: string;
+}
+
+export class UpdateAgeGroupDto extends UpdateProductMetadataDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  minAge?: number | null;
 
   @IsOptional()
-  @IsEnum(ProductStatus)
-  status?: ProductStatus;
-
-  @IsOptional()
-  @IsBoolean()
-  isFeatured?: boolean;
+  @IsInt()
+  @Min(0)
+  maxAge?: number | null;
 }

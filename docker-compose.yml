@@ -28,6 +28,7 @@ services:
       PORT: 3000
       HOST: 0.0.0.0
       DATABASE_URL: postgresql://skincare:skincare@postgres:5432/skincare_db
+      CORS_ORIGIN: http://localhost:5000,http://127.0.0.1:5000,http://localhost:3001,http://127.0.0.1:3001
     ports:
       - "3000:3000"
     command: sh -c "npm ci && npm run start:dev"
@@ -40,8 +41,29 @@ services:
       postgres:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    container_name: skincare-frontend-dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/api/v1
+    ports:
+      - "5000:3000"
+    command: sh -c "npm ci && npm run dev"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+    depends_on:
+      - backend
+
 volumes:
   postgres_dev_data:
   backend_node_modules:
   backend_dist:
   backend_generated:
+  frontend_node_modules:
+  frontend_next:

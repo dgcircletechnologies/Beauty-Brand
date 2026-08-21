@@ -7,8 +7,10 @@ import { CommonModule } from '../common/common.module';
 import { AccessTokenMiddleware } from '../common/middleware/access-token.middleware';
 import { allowRoles } from '../common/middleware/role.middleware';
 import { DatabaseModule } from '../database/database.module';
+import { AdminProductMetadataController } from './admin/admin-product-metadata.controller';
 import { AdminProductController } from './admin/admin-product.controller';
 import { AdminProductVariantController } from './admin/admin-product-variant.controller';
+import { ProductMetadataService } from './product-metadata.service';
 import { ProductService } from './product.service';
 import { ProductPublicController } from './public/public-product.controller';
 import { ProductVariantService } from './variant/product-variant.service';
@@ -19,9 +21,10 @@ import { ProductVariantService } from './variant/product-variant.service';
     ProductPublicController,
     AdminProductController,
     AdminProductVariantController,
+    AdminProductMetadataController,
   ],
-  providers: [ProductService, ProductVariantService],
-  exports: [ProductService, ProductVariantService],
+  providers: [ProductService, ProductVariantService, ProductMetadataService],
+  exports: [ProductService, ProductVariantService, ProductMetadataService],
 })
 export class ProductModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
@@ -30,6 +33,10 @@ export class ProductModule implements NestModule {
         AccessTokenMiddleware,
         allowRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
       )
-      .forRoutes(AdminProductController, AdminProductVariantController);
+      .forRoutes(
+        AdminProductController,
+        AdminProductVariantController,
+        AdminProductMetadataController,
+      );
   }
 }
