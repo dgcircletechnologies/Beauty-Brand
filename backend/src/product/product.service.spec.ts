@@ -72,6 +72,15 @@ describe('ProductService', () => {
             },
           ],
         },
+        attributeValues: {
+          include: {
+            attribute: true,
+            option: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
         variants: {
           where: {
             deletedAt: null,
@@ -115,6 +124,15 @@ describe('ProductService', () => {
               sortOrder: 'asc',
             },
           ],
+        },
+        attributeValues: {
+          include: {
+            attribute: true,
+            option: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
         },
         variants: {
           where: {

@@ -13,3 +13,14 @@ export const UserRole = {
 } as const;
 
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+
+export const AttributeDataType = {
+  TEXT: 'TEXT',
+  NUMBER: 'NUMBER',
+  BOOLEAN: 'BOOLEAN',
+  SELECT: 'SELECT',
+  MULTI_SELECT: 'MULTI_SELECT',
+} as const;
+
+export type AttributeDataType =
+  (typeof AttributeDataType)[keyof typeof AttributeDataType];

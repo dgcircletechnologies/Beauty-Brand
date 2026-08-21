@@ -40,6 +40,17 @@ export class ProductVariantService {
         productId,
         deletedAt: null,
       },
+      include: {
+        attributeValues: {
+          include: {
+            attribute: true,
+            option: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
       orderBy: {
         createdAt: 'desc',
       },
@@ -122,6 +133,17 @@ export class ProductVariantService {
         id: variantId,
         productId,
         deletedAt: null,
+      },
+      include: {
+        attributeValues: {
+          include: {
+            attribute: true,
+            option: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
       },
     });
 

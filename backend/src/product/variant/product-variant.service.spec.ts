@@ -117,6 +117,45 @@ describe('ProductVariantService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('fetches variants with attribute values', async () => {
+    const expectedVariants = [
+      {
+        id: 'variant_1',
+        attributeValues: [],
+      },
+    ];
+
+    product.findFirst.mockResolvedValue({
+      id: 'product_1',
+    });
+    productVariant.findMany.mockResolvedValue(expectedVariants);
+
+    await expect(service.findByProduct('product_1')).resolves.toBe(
+      expectedVariants,
+    );
+
+    expect(productVariant.findMany).toHaveBeenCalledWith({
+      where: {
+        productId: 'product_1',
+        deletedAt: null,
+      },
+      include: {
+        attributeValues: {
+          include: {
+            attribute: true,
+            option: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  });
+
   it('soft deletes a variant and disables it', async () => {
     const expectedVariant = {
       id: 'variant_1',
@@ -139,6 +178,17 @@ describe('ProductVariantService', () => {
         id: 'variant_1',
         productId: 'product_1',
         deletedAt: null,
+      },
+      include: {
+        attributeValues: {
+          include: {
+            attribute: true,
+            option: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
       },
     });
     expect(productVariant.update).toHaveBeenCalledWith({
