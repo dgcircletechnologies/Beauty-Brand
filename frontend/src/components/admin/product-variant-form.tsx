@@ -4,16 +4,26 @@ import { FormEvent, useState } from "react";
 
 import type { CreateAdminProductVariantPayload } from "@/lib/api/admin";
 
+export type ProductVariantFormPayload = CreateAdminProductVariantPayload & {
+  imageFileKeys?: string[];
+};
+
 type ProductVariantFormProps = {
   asForm?: boolean;
+  imageOptions?: {
+    key: string;
+    label: string;
+    previewUrl: string;
+  }[];
   isSubmitting?: boolean;
   onCancel?: () => void;
-  onSubmit: (payload: CreateAdminProductVariantPayload) => Promise<void> | void;
+  onSubmit: (payload: ProductVariantFormPayload) => Promise<void> | void;
   submitLabel?: string;
 };
 
 export function ProductVariantForm({
   asForm = true,
+  imageOptions = [],
   isSubmitting = false,
   onCancel,
   onSubmit,
@@ -24,6 +34,7 @@ export function ProductVariantForm({
   const [compareAtPrice, setCompareAtPrice] = useState("");
   const [stockQuantity, setStockQuantity] = useState("0");
   const [isActive, setIsActive] = useState(true);
+  const [selectedImageKeys, setSelectedImageKeys] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   async function submitVariant() {
@@ -45,6 +56,7 @@ export function ProductVariantForm({
       compareAtPrice: compareAtPrice ? Number(compareAtPrice) : undefined,
       stockQuantity: stockQuantity ? Number(stockQuantity) : 0,
       isActive,
+      imageFileKeys: selectedImageKeys,
     });
 
     setSku("");
@@ -52,6 +64,7 @@ export function ProductVariantForm({
     setCompareAtPrice("");
     setStockQuantity("0");
     setIsActive(true);
+    setSelectedImageKeys([]);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -113,6 +126,27 @@ export function ProductVariantForm({
         />
         Active variant
       </label>
+
+      {imageOptions.length ? (
+        <div className="variant-image-picker">
+          {imageOptions.map((image) => (
+            <label key={image.key}>
+              <input
+                checked={selectedImageKeys.includes(image.key)}
+                type="checkbox"
+                onChange={() =>
+                  setSelectedImageKeys((current) =>
+                    current.includes(image.key)
+                      ? current.filter((key) => key !== image.key)
+                      : [...current, image.key],
+                  )
+                }
+              />
+              <img alt={image.label} src={image.previewUrl} />
+            </label>
+          ))}
+        </div>
+      ) : null}
 
       {error ? <p className="form-error">{error}</p> : null}
 

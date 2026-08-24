@@ -9,10 +9,14 @@ import {
   AdminProduct,
   AdminProductDetail,
   CreateAdminProductVariantPayload,
+  assignAdminVariantImages,
   createAdminProductVariant,
+  deleteAdminProductImage,
   getAdminCategories,
   getAdminProduct,
   getAdminProducts,
+  updateAdminProductImage,
+  uploadAdminProductImages,
 } from "@/lib/api/admin";
 
 export default function AllProductsPage() {
@@ -35,6 +39,14 @@ export default function AllProductsPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isVariantFormOpen, setIsVariantFormOpen] = useState(false);
   const [isVariantSubmitting, setIsVariantSubmitting] = useState(false);
+  const [imageDrafts, setImageDrafts] = useState<
+    { file: File; key: string; previewUrl: string }[]
+  >([]);
+  const [imageActionError, setImageActionError] = useState<string | null>(null);
+  const [isImageSubmitting, setIsImageSubmitting] = useState(false);
+  const [variantImageSelections, setVariantImageSelections] = useState<
+    Record<string, string[]>
+  >({});
 
   useEffect(() => {
     if (!accessToken) {
@@ -102,6 +114,7 @@ export default function AllProductsPage() {
 
         if (isMounted) {
           setSelectedProduct(product);
+          setVariantImageSelections(buildVariantImageSelections(product));
         }
       } catch (caughtError) {
         if (!isMounted) {
@@ -140,6 +153,7 @@ export default function AllProductsPage() {
       await createAdminProductVariant(accessToken, selectedProductId, payload);
       const product = await getAdminProduct(accessToken, selectedProductId);
       setSelectedProduct(product);
+      setVariantImageSelections(buildVariantImageSelections(product));
       setIsVariantFormOpen(false);
     } catch (caughtError) {
       setVariantFormError(
@@ -150,6 +164,154 @@ export default function AllProductsPage() {
     } finally {
       setIsVariantSubmitting(false);
     }
+  }
+
+  async function refreshSelectedProduct() {
+    if (!accessToken || !selectedProductId) {
+      return;
+    }
+
+    const product = await getAdminProduct(accessToken, selectedProductId);
+    setSelectedProduct(product);
+    setVariantImageSelections(buildVariantImageSelections(product));
+  }
+
+  async function handleUploadImages() {
+    if (!accessToken || !selectedProductId || !imageDrafts.length) {
+      return;
+    }
+
+    setImageActionError(null);
+    setIsImageSubmitting(true);
+
+    try {
+      await uploadAdminProductImages(
+        accessToken,
+        selectedProductId,
+        imageDrafts.map((image) => image.file),
+      );
+      imageDrafts.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+      setImageDrafts([]);
+      await refreshSelectedProduct();
+    } catch (caughtError) {
+      setImageActionError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to upload product images",
+      );
+    } finally {
+      setIsImageSubmitting(false);
+    }
+  }
+
+  function addImageDrafts(files: File[]) {
+    setImageDrafts((current) => [
+      ...current,
+      ...files.map((file) => ({
+        file,
+        key: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+        previewUrl: URL.createObjectURL(file),
+      })),
+    ]);
+  }
+
+  function removeImageDraft(imageKey: string) {
+    setImageDrafts((current) => {
+      const image = current.find((draft) => draft.key === imageKey);
+
+      if (image) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+
+      return current.filter((draft) => draft.key !== imageKey);
+    });
+  }
+
+  async function handleSetPrimaryImage(imageId: string) {
+    if (!accessToken || !selectedProductId) {
+      return;
+    }
+
+    setImageActionError(null);
+    setIsImageSubmitting(true);
+
+    try {
+      await updateAdminProductImage(accessToken, selectedProductId, imageId, {
+        isPrimary: true,
+      });
+      await refreshSelectedProduct();
+    } catch (caughtError) {
+      setImageActionError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to set primary image",
+      );
+    } finally {
+      setIsImageSubmitting(false);
+    }
+  }
+
+  async function handleDeleteImage(imageId: string) {
+    if (!accessToken || !selectedProductId) {
+      return;
+    }
+
+    setImageActionError(null);
+    setIsImageSubmitting(true);
+
+    try {
+      await deleteAdminProductImage(accessToken, selectedProductId, imageId);
+      await refreshSelectedProduct();
+    } catch (caughtError) {
+      setImageActionError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to delete image",
+      );
+    } finally {
+      setIsImageSubmitting(false);
+    }
+  }
+
+  async function handleSaveVariantImages(variantId: string) {
+    if (!accessToken || !selectedProductId) {
+      return;
+    }
+
+    setImageActionError(null);
+    setIsImageSubmitting(true);
+
+    try {
+      await assignAdminVariantImages(
+        accessToken,
+        selectedProductId,
+        variantId,
+        variantImageSelections[variantId] ?? [],
+      );
+      await refreshSelectedProduct();
+    } catch (caughtError) {
+      setImageActionError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to assign variant images",
+      );
+    } finally {
+      setIsImageSubmitting(false);
+    }
+  }
+
+  function toggleVariantImage(variantId: string, imageId: string) {
+    setVariantImageSelections((current) => {
+      const selectedImages = current[variantId] ?? [];
+      const nextSelectedImages = selectedImages.includes(imageId)
+        ? selectedImages.filter((selectedImageId) => selectedImageId !== imageId)
+        : [...selectedImages, imageId];
+
+      return {
+        ...current,
+        [variantId]: nextSelectedImages,
+      };
+    });
   }
 
   const filteredProducts = useMemo(() => {
@@ -305,6 +467,82 @@ export default function AllProductsPage() {
               >
                 {isVariantFormOpen ? "Close Variant Form" : "Add Variant"}
               </button>
+              <section className="variant-form-panel">
+                <div className="section-title">
+                  <h3>Images</h3>
+                  <span>{selectedProduct.images?.length ?? 0}</span>
+                </div>
+                {imageActionError ? (
+                  <p className="form-error">{imageActionError}</p>
+                ) : null}
+                <label>
+                  Upload product images
+                  <input
+                    accept="image/*"
+                    multiple
+                    type="file"
+                    onChange={(event) =>
+                      addImageDrafts(Array.from(event.target.files ?? []))
+                    }
+                  />
+                </label>
+                {imageDrafts.length ? (
+                  <div className="product-image-grid">
+                    {imageDrafts.map((image) => (
+                      <article className="product-image-card" key={image.key}>
+                        <img alt={image.file.name} src={image.previewUrl} />
+                        <span>{image.file.name}</span>
+                        <button
+                          className="secondary-button compact-button"
+                          type="button"
+                          onClick={() => removeImageDraft(image.key)}
+                        >
+                          Remove
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+                <button
+                  className="primary-button"
+                  disabled={isImageSubmitting || !imageDrafts.length}
+                  type="button"
+                  onClick={() => void handleUploadImages()}
+                >
+                  {isImageSubmitting ? "Saving..." : "Upload Images"}
+                </button>
+                {selectedProduct.images?.length ? (
+                  <div className="product-image-grid">
+                    {selectedProduct.images.map((image) => (
+                      <article className="product-image-card" key={image.id}>
+                        <img
+                          alt={image.altText ?? selectedProduct.name}
+                          src={image.url}
+                        />
+                        <span>{image.isPrimary ? "Primary" : "Gallery"}</span>
+                        <button
+                          className="secondary-button compact-button"
+                          disabled={isImageSubmitting || image.isPrimary}
+                          type="button"
+                          onClick={() => void handleSetPrimaryImage(image.id)}
+                        >
+                          Set Primary
+                        </button>
+                        <button
+                          className="secondary-button compact-button"
+                          disabled={isImageSubmitting}
+                          type="button"
+                          onClick={() => void handleDeleteImage(image.id)}
+                        >
+                          Delete
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted-text">No product images uploaded yet.</p>
+                )}
+              </section>
               {isVariantFormOpen ? (
                 <div className="variant-form-panel">
                   <ProductVariantForm
@@ -330,6 +568,37 @@ export default function AllProductsPage() {
                         <span>{formatMoney(variant.price)}</span>
                         <small>Stock {variant.stockQuantity}</small>
                       </div>
+                      {selectedProduct.images?.length ? (
+                        <div className="variant-image-picker">
+                          {selectedProduct.images.map((image) => (
+                            <label key={`${variant.id}-${image.id}`}>
+                              <input
+                                checked={(
+                                  variantImageSelections[variant.id] ?? []
+                                ).includes(image.id)}
+                                type="checkbox"
+                                onChange={() =>
+                                  toggleVariantImage(variant.id, image.id)
+                                }
+                              />
+                              <img
+                                alt={image.altText ?? selectedProduct.name}
+                                src={image.url}
+                              />
+                            </label>
+                          ))}
+                          <button
+                            className="secondary-button compact-button"
+                            disabled={isImageSubmitting}
+                            type="button"
+                            onClick={() =>
+                              void handleSaveVariantImages(variant.id)
+                            }
+                          >
+                            Save Images
+                          </button>
+                        </div>
+                      ) : null}
                     </article>
                   ))
                 ) : (
@@ -352,4 +621,14 @@ function formatMoney(value: string) {
   }
 
   return amount.toFixed(2);
+}
+
+function buildVariantImageSelections(product: AdminProductDetail) {
+  return product.variants.reduce<Record<string, string[]>>((acc, variant) => {
+    acc[variant.id] = product.images
+      ?.filter((image) => image.variantId === variant.id)
+      .map((image) => image.id) ?? [];
+
+    return acc;
+  }, {});
 }

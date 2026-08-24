@@ -4,16 +4,20 @@ import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
-import { ProductVariantForm } from "@/components/admin/product-variant-form";
+import {
+  ProductVariantForm,
+  ProductVariantFormPayload,
+} from "@/components/admin/product-variant-form";
 import { useAuth } from "@/contexts/auth-context";
 import {
   AdminAttribute,
   AdminAttributeOption,
   AdminProduct,
   AdminProductMetadataOptions,
+  AdminProductImage,
   CreateAdminProductIngredientPayload,
-  CreateAdminProductVariantPayload,
   SetProductAttributeValuePayload,
+  assignAdminVariantImages,
   assignAdminProductCategory,
   createAdminProduct,
   createAdminProductVariant,
@@ -21,6 +25,7 @@ import {
   getAdminAttributes,
   getAdminProductMetadataOptions,
   setAdminProductAttributeValue,
+  uploadAdminProductImages,
 } from "@/lib/api/admin";
 
 type AttributeFormValue = {
@@ -31,6 +36,14 @@ type AttributeFormValue = {
   optionId: string;
   optionIds: string[];
 };
+
+type ProductImageDraft = {
+  file: File;
+  key: string;
+  previewUrl: string;
+};
+
+type VariantDraft = ProductVariantFormPayload;
 
 const defaultMetadata: AdminProductMetadataOptions = {
   ingredients: [],
@@ -77,10 +90,8 @@ export default function AddProductPage() {
   const [attributeValues, setAttributeValues] = useState<
     Record<string, AttributeFormValue>
   >({});
-  const [variantDrafts, setVariantDrafts] = useState<
-    CreateAdminProductVariantPayload[]
-  >([]);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [variantDrafts, setVariantDrafts] = useState<VariantDraft[]>([]);
+  const [imageDrafts, setImageDrafts] = useState<ProductImageDraft[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -247,10 +258,39 @@ export default function AddProductPage() {
   }
 
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
-    setImageFiles(Array.from(event.target.files ?? []));
+    const selectedFiles = Array.from(event.target.files ?? []);
+
+    setImageDrafts((current) => [
+      ...current,
+      ...selectedFiles.map((file) => ({
+        file,
+        key: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+        previewUrl: URL.createObjectURL(file),
+      })),
+    ]);
+    event.target.value = "";
   }
 
-  function addVariantDraft(payload: CreateAdminProductVariantPayload) {
+  function removeImageDraft(imageKey: string) {
+    setImageDrafts((current) => {
+      const imageDraft = current.find((image) => image.key === imageKey);
+
+      if (imageDraft) {
+        URL.revokeObjectURL(imageDraft.previewUrl);
+      }
+
+      return current.filter((image) => image.key !== imageKey);
+    });
+    setVariantDrafts((current) =>
+      current.map((variant) => ({
+        ...variant,
+        imageFileKeys:
+          variant.imageFileKeys?.filter((key) => key !== imageKey) ?? [],
+      })),
+    );
+  }
+
+  function addVariantDraft(payload: ProductVariantFormPayload) {
     setVariantDrafts((current) => [...current, payload]);
   }
 
@@ -383,10 +423,40 @@ export default function AddProductPage() {
         ...buildAttributePayloads().map((payload) =>
           setAdminProductAttributeValue(accessToken, product.id, payload),
         ),
-        ...variantDrafts.map((variant) =>
-          createAdminProductVariant(accessToken, product.id, variant),
-        ),
       ]);
+
+      const uploadedImages = imageDrafts.length
+        ? await uploadAdminProductImages(
+            accessToken,
+            product.id,
+            imageDrafts.map((image) => image.file),
+          )
+        : [];
+      const uploadedImageByDraftKey = mapUploadedImagesToDrafts(
+        imageDrafts,
+        uploadedImages,
+      );
+
+      for (const variantDraft of variantDrafts) {
+        const { imageFileKeys = [], ...variantPayload } = variantDraft;
+        const variant = await createAdminProductVariant(
+          accessToken,
+          product.id,
+          variantPayload,
+        );
+        const imageIds = imageFileKeys
+          .map((key) => uploadedImageByDraftKey.get(key)?.id)
+          .filter((imageId): imageId is string => Boolean(imageId));
+
+        if (imageIds.length) {
+          await assignAdminVariantImages(
+            accessToken,
+            product.id,
+            variant.id,
+            imageIds,
+          );
+        }
+      }
 
       setSuccess("Product created successfully");
       router.push("/admin/products/all");
@@ -717,10 +787,20 @@ export default function AddProductPage() {
                 onChange={handleImageChange}
               />
             </label>
-            {imageFiles.length > 0 ? (
-              <div className="image-file-list">
-                {imageFiles.map((file) => (
-                  <span key={`${file.name}-${file.size}`}>{file.name}</span>
+            {imageDrafts.length > 0 ? (
+              <div className="product-image-grid">
+                {imageDrafts.map((image) => (
+                  <article className="product-image-card" key={image.key}>
+                    <img alt={image.file.name} src={image.previewUrl} />
+                    <span>{image.file.name}</span>
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      onClick={() => removeImageDraft(image.key)}
+                    >
+                      Remove
+                    </button>
+                  </article>
                 ))}
               </div>
             ) : null}
@@ -729,6 +809,11 @@ export default function AddProductPage() {
           <FormBlock title="Variants">
             <ProductVariantForm
               asForm={false}
+              imageOptions={imageDrafts.map((image) => ({
+                key: image.key,
+                label: image.file.name,
+                previewUrl: image.previewUrl,
+              }))}
               submitLabel="Add Variant"
               onSubmit={addVariantDraft}
             />
@@ -748,6 +833,11 @@ export default function AddProductPage() {
                       <span>{variant.price.toFixed(2)}</span>
                       <small>Stock {variant.stockQuantity ?? 0}</small>
                     </div>
+                    {variant.imageFileKeys?.length ? (
+                      <small>
+                        Images: {variant.imageFileKeys.length}
+                      </small>
+                    ) : null}
                     <button
                       aria-label={`Remove ${variant.sku}`}
                       className="icon-button"
@@ -1055,6 +1145,24 @@ function RemoveIcon() {
         strokeWidth="2"
       />
     </svg>
+  );
+}
+
+function mapUploadedImagesToDrafts(
+  imageDrafts: ProductImageDraft[],
+  uploadedImages: AdminProductImage[],
+) {
+  return imageDrafts.reduce<Map<string, AdminProductImage>>(
+    (imageMap, imageDraft, index) => {
+      const uploadedImage = uploadedImages[index];
+
+      if (uploadedImage) {
+        imageMap.set(imageDraft.key, uploadedImage);
+      }
+
+      return imageMap;
+    },
+    new Map(),
   );
 }
 

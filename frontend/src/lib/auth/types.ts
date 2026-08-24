@@ -1,4 +1,9 @@
 export type UserRole = "CUSTOMER" | "ADMIN" | "SUPER_ADMIN";
+export type UserGender =
+  | "FEMALE"
+  | "MALE"
+  | "NON_BINARY"
+  | "PREFER_NOT_TO_SAY";
 
 export type AuthUser = {
   id: string;
@@ -6,6 +11,8 @@ export type AuthUser = {
   lastName: string | null;
   email: string;
   phone: string | null;
+  gender: UserGender | null;
+  age: number | null;
   role: UserRole;
   status: string;
   emailVerifiedAt: string | null;
@@ -28,6 +35,8 @@ export type SignupPayload = {
   email: string;
   password: string;
   phone?: string;
+  gender?: UserGender;
+  age?: number;
 };
 
 export type ForgotPasswordPayload = {

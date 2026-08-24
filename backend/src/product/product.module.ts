@@ -9,7 +9,13 @@ import { allowRoles } from '../common/middleware/role.middleware';
 import { DatabaseModule } from '../database/database.module';
 import { AdminProductMetadataController } from './admin/admin-product-metadata.controller';
 import { AdminProductController } from './admin/admin-product.controller';
+import {
+  AdminProductImageController,
+  AdminVariantImageController,
+} from './admin/admin-product-image.controller';
 import { AdminProductVariantController } from './admin/admin-product-variant.controller';
+import { CloudinaryProductImageService } from './cloudinary-product-image.service';
+import { ProductImageService } from './product-image.service';
 import { ProductMetadataService } from './product-metadata.service';
 import { ProductService } from './product.service';
 import { ProductPublicController } from './public/public-product.controller';
@@ -20,11 +26,24 @@ import { ProductVariantService } from './variant/product-variant.service';
   controllers: [
     ProductPublicController,
     AdminProductController,
+    AdminProductImageController,
+    AdminVariantImageController,
     AdminProductVariantController,
     AdminProductMetadataController,
   ],
-  providers: [ProductService, ProductVariantService, ProductMetadataService],
-  exports: [ProductService, ProductVariantService, ProductMetadataService],
+  providers: [
+    ProductService,
+    ProductVariantService,
+    ProductMetadataService,
+    ProductImageService,
+    CloudinaryProductImageService,
+  ],
+  exports: [
+    ProductService,
+    ProductVariantService,
+    ProductMetadataService,
+    ProductImageService,
+  ],
 })
 export class ProductModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
@@ -35,6 +54,8 @@ export class ProductModule implements NestModule {
       )
       .forRoutes(
         AdminProductController,
+        AdminProductImageController,
+        AdminVariantImageController,
         AdminProductVariantController,
         AdminProductMetadataController,
       );

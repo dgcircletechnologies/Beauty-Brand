@@ -27,6 +27,23 @@ export type AdminProductCategory = {
   category: AdminCategory;
 };
 
+export type AdminProductImage = {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  url: string;
+  publicId: string | null;
+  altText: string | null;
+  sortOrder: number;
+  isPrimary: boolean;
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  bytes: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AdminProduct = {
   id: string;
   name: string;
@@ -38,6 +55,7 @@ export type AdminProduct = {
   createdAt: string;
   updatedAt: string;
   categories: AdminProductCategory[];
+  images?: AdminProductImage[];
 };
 
 export type AdminProductVariant = {
@@ -50,6 +68,7 @@ export type AdminProductVariant = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  images?: AdminProductImage[];
 };
 
 export type CreateAdminProductVariantPayload = {
@@ -245,6 +264,132 @@ export type AdminExchangeRate = {
   quoteCurrency: AdminCurrency;
 };
 
+export type AdminShippingRate = {
+  id: string;
+  zoneId: string;
+  name: string;
+  serviceCode: string | null;
+  calculation: "FLAT" | "FREE";
+  amount: string;
+  currencyCode: string;
+  minOrderAmount: string | null;
+  maxOrderAmount: string | null;
+  estimatedDaysMin: number | null;
+  estimatedDaysMax: number | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  currency?: AdminCurrency;
+};
+
+export type AdminZoneCountry = {
+  id: string;
+  zoneId: string;
+  countryCode: string;
+  countryName: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminShippingZone = {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  countries: AdminZoneCountry[];
+  rates: AdminShippingRate[];
+};
+
+export type AdminOrder = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  subtotal: number;
+  shippingAmount: number;
+  taxAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  baseSubtotal: number;
+  baseShippingAmount: number;
+  baseTaxAmount: number;
+  baseDiscountAmount: number;
+  baseTotalAmount: number;
+  displaySubtotal: number;
+  displayShippingAmount: number;
+  displayTaxAmount: number;
+  displayDiscountAmount: number;
+  displayTotalAmount: number;
+  customerEmail: string;
+  customerPhone: string | null;
+  placedAt: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string | null;
+  };
+  displayCurrency: {
+    code: string;
+    symbol: string | null;
+    decimalDigits: number;
+  };
+  items: {
+    id: string;
+    productName: string;
+    variantLabel: string | null;
+    sku: string;
+    quantity: number;
+    baseUnitPrice: number;
+    baseLineTotal: number;
+    displayUnitPrice: number;
+    displayLineTotal: number;
+    unitPrice: number;
+    lineTotal: number;
+  }[];
+  addresses: {
+    id: string;
+    type: "SHIPPING" | "BILLING";
+    firstName: string;
+    lastName: string;
+    line1: string;
+    line2: string | null;
+    city: string;
+    stateOrProvince: string | null;
+    postalCode: string;
+    countryCode: string;
+    phone: string | null;
+  }[];
+  statusHistory: {
+    id: string;
+    fromStatus: string | null;
+    toStatus: string;
+    reason: string | null;
+    createdAt: string;
+  }[];
+  shipments: {
+    id: string;
+    status: string;
+    carrier: string | null;
+    service: string | null;
+    trackingNumber: string | null;
+    trackingUrl: string | null;
+    estimatedDeliveryAt: string | null;
+  }[];
+  cancellationRequests: {
+    id: string;
+    reason: string;
+    details: string | null;
+    status: string;
+    decisionNote: string | null;
+    requestedAt: string;
+    decidedAt: string | null;
+  }[];
+};
+
 export type CreateAdminExchangeRatePayload = {
   baseCurrencyCode: string;
   quoteCurrencyCode: string;
@@ -311,6 +456,81 @@ export function createAdminProductVariant(
       method: "POST",
       headers: withAuth(accessToken),
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function getAdminProductImages(accessToken: string, productId: string) {
+  return apiRequest<AdminProductImage[]>(`/admin/products/${productId}/images`, {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function uploadAdminProductImages(
+  accessToken: string,
+  productId: string,
+  files: File[],
+) {
+  const formData = new FormData();
+
+  files.forEach((file) => {
+    formData.append("images", file);
+  });
+
+  return apiRequest<AdminProductImage[]>(`/admin/products/${productId}/images`, {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: formData,
+  });
+}
+
+export function updateAdminProductImage(
+  accessToken: string,
+  productId: string,
+  imageId: string,
+  payload: {
+    altText?: string;
+    sortOrder?: number;
+    isPrimary?: boolean;
+    variantId?: string | null;
+  },
+) {
+  return apiRequest<AdminProductImage>(
+    `/admin/products/${productId}/images/${imageId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminProductImage(
+  accessToken: string,
+  productId: string,
+  imageId: string,
+) {
+  return apiRequest<AdminProductImage>(
+    `/admin/products/${productId}/images/${imageId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function assignAdminVariantImages(
+  accessToken: string,
+  productId: string,
+  variantId: string,
+  imageIds: string[],
+) {
+  return apiRequest<AdminProductImage[]>(
+    `/admin/products/${productId}/variants/${variantId}/images`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify({ imageIds }),
     },
   );
 }
@@ -520,4 +740,162 @@ export function createAdminExchangeRate(
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),
   });
+}
+
+export function getAdminShippingZones(accessToken: string) {
+  return apiRequest<AdminShippingZone[]>("/admin/shipping/zones", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function createAdminShippingZone(
+  accessToken: string,
+  payload: { name: string; code: string; isActive?: boolean },
+) {
+  return apiRequest<AdminShippingZone>("/admin/shipping/zones", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminShippingZone(
+  accessToken: string,
+  zoneId: string,
+  payload: { name?: string; code?: string; isActive?: boolean },
+) {
+  return apiRequest<AdminShippingZone>(`/admin/shipping/zones/${zoneId}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function addAdminZoneCountry(
+  accessToken: string,
+  zoneId: string,
+  payload: { countryCode: string; countryName: string; isActive?: boolean },
+) {
+  return apiRequest<AdminZoneCountry>(
+    `/admin/shipping/zones/${zoneId}/countries`,
+    {
+      method: "POST",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateAdminZoneCountry(
+  accessToken: string,
+  countryId: string,
+  payload: { countryCode?: string; countryName?: string; isActive?: boolean },
+) {
+  return apiRequest<AdminZoneCountry>(`/admin/shipping/countries/${countryId}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createAdminShippingRate(
+  accessToken: string,
+  payload: {
+    zoneId: string;
+    name: string;
+    serviceCode?: string;
+    calculation?: "FLAT" | "FREE";
+    amount: number;
+    currencyCode: string;
+    minOrderAmount?: number;
+    maxOrderAmount?: number;
+    estimatedDaysMin?: number;
+    estimatedDaysMax?: number;
+    isActive?: boolean;
+  },
+) {
+  return apiRequest<AdminShippingRate>("/admin/shipping/rates", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminShippingRate(
+  accessToken: string,
+  rateId: string,
+  payload: {
+    zoneId?: string;
+    name?: string;
+    serviceCode?: string;
+    calculation?: "FLAT" | "FREE";
+    amount?: number;
+    currencyCode?: string;
+    minOrderAmount?: number | null;
+    maxOrderAmount?: number | null;
+    estimatedDaysMin?: number;
+    estimatedDaysMax?: number;
+    isActive?: boolean;
+  },
+) {
+  return apiRequest<AdminShippingRate>(`/admin/shipping/rates/${rateId}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAdminOrders(accessToken: string) {
+  return apiRequest<AdminOrder[]>("/admin/orders", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function updateAdminOrderStatus(
+  accessToken: string,
+  orderId: string,
+  payload: { status: string; reason?: string },
+) {
+  return apiRequest<AdminOrder>(`/admin/orders/${orderId}/status`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function decideAdminCancellationRequest(
+  accessToken: string,
+  requestId: string,
+  payload: { status: "APPROVED" | "REJECTED"; decisionNote?: string },
+) {
+  return apiRequest<AdminOrder>(
+    `/admin/orders/cancellation-requests/${requestId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateAdminShipment(
+  accessToken: string,
+  orderId: string,
+  payload: {
+    status?: string;
+    carrier?: string;
+    service?: string;
+    trackingNumber?: string;
+    trackingUrl?: string;
+    estimatedDeliveryAt?: string;
+  },
+) {
+  return apiRequest<AdminOrder["shipments"][number]>(
+    `/admin/orders/${orderId}/shipment`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
 }

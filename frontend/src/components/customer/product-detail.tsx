@@ -63,6 +63,9 @@ export function ProductDetail({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [addingVariantId, setAddingVariantId] = useState<string | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -163,6 +166,12 @@ export function ProductDetail({ slug }: { slug: string }) {
     product.hairProfiles?.map((item) => item.hairProfile) ?? [];
   const concerns = product.concerns?.map((item) => item.concern) ?? [];
   const benefits = product.productBenefits?.map((item) => item.benefit) ?? [];
+  const selectedVariant = product.variants?.find(
+    (variant) => variant.id === selectedVariantId,
+  );
+  const galleryImages = selectedVariant?.images?.length
+    ? selectedVariant.images
+    : product.images ?? [];
 
   return (
     <main className="customer-page">
@@ -176,6 +185,21 @@ export function ProductDetail({ slug }: { slug: string }) {
           Back to Products
         </Link>
       </section>
+
+      {galleryImages.length ? (
+        <section className="product-detail-section">
+          <h2>Images</h2>
+          <div className="customer-product-gallery">
+            {galleryImages.map((image) => (
+              <img
+                alt={image.altText ?? product.name}
+                key={image.id}
+                src={image.url}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {product.description ? (
         <section className="product-detail-section">
@@ -276,6 +300,13 @@ export function ProductDetail({ slug }: { slug: string }) {
                     </p>
                   </div>
                   <strong>{formatPrice(variant.price)}</strong>
+                  <button
+                    className="secondary-button compact-button"
+                    type="button"
+                    onClick={() => setSelectedVariantId(variant.id)}
+                  >
+                    View Images
+                  </button>
                   {isAuthenticated ? (
                     <button
                       className="primary-button compact-button"

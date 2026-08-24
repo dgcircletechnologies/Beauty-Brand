@@ -3,9 +3,15 @@ model ProductImage {
   productId String
   variantId String?
   url       String
+  publicId  String?
   altText   String?
   sortOrder Int      @default(0)
   isPrimary Boolean  @default(false)
+  width     Int?
+  height    Int?
+  format    String?
+  bytes     Int?
+  deletedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -15,4 +21,5 @@ model ProductImage {
   @@index([productId, sortOrder])
   @@index([variantId])
   @@index([productId, isPrimary])
+  @@index([deletedAt])
 }

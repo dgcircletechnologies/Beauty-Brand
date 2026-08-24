@@ -35,6 +35,7 @@ type AuthContextValue = {
   forgotPassword: (payload: ForgotPasswordPayload) => Promise<void>;
   resetPassword: (payload: ResetPasswordPayload) => Promise<void>;
   refreshSession: () => Promise<void>;
+  updateUser: (user: AuthUser) => void;
   logout: () => Promise<void>;
 };
 
@@ -154,6 +155,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [persistSession, redirectToLogin, refreshStoredSession, session]);
 
+  const updateUser = useCallback(
+    (user: AuthUser) => {
+      if (!session) {
+        return;
+      }
+
+      persistSession({
+        ...session,
+        user,
+      });
+    },
+    [persistSession, session],
+  );
+
   useEffect(() => {
     if (!session?.refreshToken) {
       return;
@@ -223,6 +238,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       forgotPassword,
       resetPassword,
       refreshSession,
+      updateUser,
       logout,
     }),
     [
@@ -234,6 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetPassword,
       session,
       signup,
+      updateUser,
     ],
   );
 

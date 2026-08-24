@@ -22,10 +22,13 @@ export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(!isFormData && {
+        "Content-Type": "application/json",
+      }),
       ...options.headers,
     },
   });
@@ -41,7 +44,9 @@ export async function apiRequest<T>(
 
       if (refreshedAccessToken) {
         const retryHeaders = new Headers(options.headers);
-        retryHeaders.set("Content-Type", "application/json");
+        if (!isFormData) {
+          retryHeaders.set("Content-Type", "application/json");
+        }
         retryHeaders.set("Authorization", `Bearer ${refreshedAccessToken}`);
 
         const retryResponse = await fetch(`${API_BASE_URL}${path}`, {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
@@ -25,10 +26,12 @@ export function UserNavbar() {
     selectedCurrency,
     setSelectedCurrencyCode,
   } = useCurrency();
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const links = isAuthenticated ? customerLinks : guestLinks;
 
   async function handleLogout() {
     await logout();
+    setIsAccountMenuOpen(false);
     router.push("/");
   }
 
@@ -65,16 +68,33 @@ export function UserNavbar() {
           </select>
         </label>
         {isBootstrapping ? null : isAuthenticated ? (
-          <>
-            <span className="user-pill">{user?.firstName || user?.email}</span>
+          <div className="account-menu">
             <button
               className="secondary-button compact-button"
               type="button"
-              onClick={handleLogout}
+              aria-expanded={isAccountMenuOpen}
+              onClick={() => setIsAccountMenuOpen((current) => !current)}
             >
-              Logout
+              Profile
             </button>
-          </>
+            {isAccountMenuOpen ? (
+              <div className="account-menu-panel">
+                <span className="user-pill">{user?.firstName || user?.email}</span>
+                <Link href="/profile" onClick={() => setIsAccountMenuOpen(false)}>
+                  Profile
+                </Link>
+                <Link
+                  href="/addresses"
+                  onClick={() => setIsAccountMenuOpen(false)}
+                >
+                  Addresses
+                </Link>
+                <button type="button" onClick={handleLogout}>
+                  Logout
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : (
           <>
             <Link className="secondary-link-button compact-button" href="/login">

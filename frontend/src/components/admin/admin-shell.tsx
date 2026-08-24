@@ -78,6 +78,63 @@ const metadataLinks = [
   },
 ];
 
+const orderLinks = [
+  {
+    href: "/admin/orders",
+    label: "All Orders",
+  },
+  {
+    href: "/admin/orders/status",
+    label: "Status Updates",
+  },
+  {
+    href: "/admin/orders/shipments",
+    label: "Shipments",
+  },
+  {
+    href: "/admin/orders/completed",
+    label: "Completed Orders",
+  },
+  {
+    href: "/admin/orders/cancellations",
+    label: "Cancellation Requests",
+  },
+];
+
+const shippingLinks = [
+  {
+    href: "/admin/shipping",
+    label: "Shipping Overview",
+  },
+  {
+    href: "/admin/shipping/zones",
+    label: "Zones",
+  },
+  {
+    href: "/admin/shipping/countries",
+    label: "Countries",
+  },
+  {
+    href: "/admin/shipping/rates",
+    label: "Rates",
+  },
+];
+
+const currencyLinks = [
+  {
+    href: "/admin/currencies",
+    label: "Currency Overview",
+  },
+  {
+    href: "/admin/currencies/list",
+    label: "Currency List",
+  },
+  {
+    href: "/admin/currencies/exchange-rates",
+    label: "Exchange Rates",
+  },
+];
+
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { logout, user } = useAuth();
@@ -94,11 +151,22 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [isMetadataOpen, setIsMetadataOpen] = useState(
     pathname.startsWith("/admin/product-metadata"),
   );
+  const [isCurrenciesOpen, setIsCurrenciesOpen] = useState(
+    pathname.startsWith("/admin/currencies"),
+  );
+  const [isOrdersOpen, setIsOrdersOpen] = useState(
+    pathname.startsWith("/admin/orders"),
+  );
+  const [isShippingOpen, setIsShippingOpen] = useState(
+    pathname.startsWith("/admin/shipping"),
+  );
   const isProductsActive = pathname.startsWith("/admin/products");
   const isCategoriesActive = pathname.startsWith("/admin/categories");
   const isAttributesActive = pathname.startsWith("/admin/attributes");
   const isCurrenciesActive = pathname.startsWith("/admin/currencies");
+  const isShippingActive = pathname.startsWith("/admin/shipping");
   const isMetadataActive = pathname.startsWith("/admin/product-metadata");
+  const isOrdersActive = pathname.startsWith("/admin/orders");
 
   return (
     <div
@@ -133,14 +201,124 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <span>Analytics</span>
           </Link>
 
-          <Link
-            aria-current={pathname === "/admin/currencies" ? "page" : undefined}
-            className={isCurrenciesActive ? "active nav-link" : "nav-link"}
-            href="/admin/currencies"
-          >
-            <CurrencyIcon />
-            <span>Currencies</span>
-          </Link>
+          <div className={`nav-group ${isCurrenciesActive ? "active" : ""}`}>
+            <div className="nav-group-row">
+              <Link
+                aria-current={
+                  pathname === "/admin/currencies" ? "page" : undefined
+                }
+                className={isCurrenciesActive ? "active nav-link" : "nav-link"}
+                href="/admin/currencies"
+              >
+                <CurrencyIcon />
+                <span>Currencies</span>
+              </Link>
+              <button
+                aria-expanded={isCurrenciesOpen}
+                aria-label="Toggle currency options"
+                className="icon-button nav-options-button"
+                type="button"
+                onClick={() => {
+                  setIsCurrenciesOpen((current) => !current);
+                  setIsSidebarCollapsed(false);
+                }}
+              >
+                <ChevronIcon />
+              </button>
+            </div>
+            {isCurrenciesOpen && !isSidebarCollapsed ? (
+              <div className="nav-submenu">
+                {currencyLinks.map((link) => (
+                  <Link
+                    aria-current={pathname === link.href ? "page" : undefined}
+                    className={pathname === link.href ? "active" : undefined}
+                    href={link.href}
+                    key={link.href}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className={`nav-group ${isOrdersActive ? "active" : ""}`}>
+            <div className="nav-group-row">
+              <Link
+                aria-current={pathname === "/admin/orders" ? "page" : undefined}
+                className={isOrdersActive ? "active nav-link" : "nav-link"}
+                href="/admin/orders"
+              >
+                <OrdersIcon />
+                <span>Orders</span>
+              </Link>
+              <button
+                aria-expanded={isOrdersOpen}
+                aria-label="Toggle order options"
+                className="icon-button nav-options-button"
+                type="button"
+                onClick={() => {
+                  setIsOrdersOpen((current) => !current);
+                  setIsSidebarCollapsed(false);
+                }}
+              >
+                <ChevronIcon />
+              </button>
+            </div>
+            {isOrdersOpen && !isSidebarCollapsed ? (
+              <div className="nav-submenu">
+                {orderLinks.map((link) => (
+                  <Link
+                    aria-current={pathname === link.href ? "page" : undefined}
+                    className={pathname === link.href ? "active" : undefined}
+                    href={link.href}
+                    key={link.href}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className={`nav-group ${isShippingActive ? "active" : ""}`}>
+            <div className="nav-group-row">
+              <Link
+                aria-current={pathname === "/admin/shipping" ? "page" : undefined}
+                className={isShippingActive ? "active nav-link" : "nav-link"}
+                href="/admin/shipping"
+              >
+                <ShippingIcon />
+                <span>Shipping</span>
+              </Link>
+              <button
+                aria-expanded={isShippingOpen}
+                aria-label="Toggle shipping options"
+                className="icon-button nav-options-button"
+                type="button"
+                onClick={() => {
+                  setIsShippingOpen((current) => !current);
+                  setIsSidebarCollapsed(false);
+                }}
+              >
+                <ChevronIcon />
+              </button>
+            </div>
+            {isShippingOpen && !isSidebarCollapsed ? (
+              <div className="nav-submenu">
+                {shippingLinks.map((link) => (
+                  <Link
+                    aria-current={pathname === link.href ? "page" : undefined}
+                    className={pathname === link.href ? "active" : undefined}
+                    href={link.href}
+                    key={link.href}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           <div className={`nav-group ${isCategoriesActive ? "active" : ""}`}>
             <div className="nav-group-row">
@@ -443,6 +621,54 @@ function CurrencyIcon() {
         strokeLinecap="round"
         strokeWidth="2"
       />
+    </svg>
+  );
+}
+
+function OrdersIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path
+        d="M7 4H17C18.1 4 19 4.9 19 6V20L16 18L13 20L10 18L7 20L5 18.7V6C5 4.9 5.9 4 7 4Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path d="M8 9H16" stroke="currentColor" strokeLinecap="round" />
+      <path d="M8 13H14" stroke="currentColor" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ShippingIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path
+        d="M4 8H15V16H4V8Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M15 11H18L20 13.5V16H15V11Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path d="M7 18.5A1.5 1.5 0 1 0 7 15.5A1.5 1.5 0 0 0 7 18.5Z" />
+      <path d="M17 18.5A1.5 1.5 0 1 0 17 15.5A1.5 1.5 0 0 0 17 18.5Z" />
     </svg>
   );
 }

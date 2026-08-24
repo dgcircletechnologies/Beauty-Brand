@@ -8,6 +8,9 @@ import { AdminModule } from './admin/admin.module';
 import { PublicModule } from './public/public.module';
 import { CurrencyModule } from './currency/currency.module';
 import { CartModule } from './cart/cart.module';
+import { AccountModule } from './account/account.module';
+import { OrderModule } from './order/order.module';
+import { ShippingModule } from './shipping/shipping.module';
 
 @Module({
   imports: [
@@ -19,6 +22,9 @@ import { CartModule } from './cart/cart.module';
     AuthModule,
     CurrencyModule,
     CartModule,
+    AccountModule,
+    ShippingModule,
+    OrderModule,
     AdminModule,
     PublicModule,
   ],

@@ -80,6 +80,24 @@ export class ProductService {
         deletedAt: null,
         status: ProductStatus.PUBLISHED,
       },
+      include: {
+        images: {
+          where: {
+            deletedAt: null,
+          },
+          orderBy: [
+            {
+              isPrimary: 'desc',
+            },
+            {
+              sortOrder: 'asc',
+            },
+            {
+              createdAt: 'asc',
+            },
+          ],
+        },
+      },
       orderBy: [
         {
           isFeatured: 'desc',
@@ -285,9 +303,40 @@ export class ProductService {
             isActive: true,
           }),
         },
+        include: {
+          images: {
+            where: {
+              deletedAt: null,
+            },
+            orderBy: [
+              {
+                sortOrder: 'asc' as const,
+              },
+              {
+                createdAt: 'asc' as const,
+              },
+            ],
+          },
+        },
         orderBy: {
           createdAt: 'desc' as const,
         },
+      },
+      images: {
+        where: {
+          deletedAt: null,
+        },
+        orderBy: [
+          {
+            isPrimary: 'desc' as const,
+          },
+          {
+            sortOrder: 'asc' as const,
+          },
+          {
+            createdAt: 'asc' as const,
+          },
+        ],
       },
       ingredients: {
         include: {

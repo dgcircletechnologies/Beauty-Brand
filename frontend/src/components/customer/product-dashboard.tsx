@@ -96,6 +96,13 @@ export function ProductDashboard() {
               href={`/products/${product.slug}`}
               key={product.id}
             >
+              {product.images?.[0] ? (
+                <img
+                  alt={product.images[0].altText ?? product.name}
+                  className="product-card-image"
+                  src={product.images[0].url}
+                />
+              ) : null}
               <div>
                 <p className="eyebrow">
                   {product.isFeatured ? "Featured" : "Product"}

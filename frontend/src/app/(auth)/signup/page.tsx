@@ -33,6 +33,16 @@ export default function SignupPage() {
         lastName: String(formData.get("lastName") || ""),
         email: String(formData.get("email")),
         phone: String(formData.get("phone") || ""),
+        gender:
+          String(formData.get("gender") || "") === ""
+            ? undefined
+            : (String(formData.get("gender")) as Parameters<
+                typeof signup
+              >[0]["gender"]),
+        age:
+          String(formData.get("age") || "") === ""
+            ? undefined
+            : Number(formData.get("age")),
         password,
       });
 
@@ -81,6 +91,22 @@ export default function SignupPage() {
             Phone
             <input name="phone" type="tel" autoComplete="tel" />
           </label>
+          <div className="split-fields">
+            <label>
+              Gender
+              <select name="gender" defaultValue="">
+                <option value="">Not specified</option>
+                <option value="FEMALE">Female</option>
+                <option value="MALE">Male</option>
+                <option value="NON_BINARY">Non-binary</option>
+                <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+              </select>
+            </label>
+            <label>
+              Age
+              <input name="age" type="number" min={1} max={130} />
+            </label>
+          </div>
           <PasswordField
             label="Password"
             name="password"

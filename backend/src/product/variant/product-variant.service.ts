@@ -25,6 +25,7 @@ export class ProductVariantService {
           stockQuantity: dto.stockQuantity ?? 0,
           isActive: dto.isActive ?? true,
         },
+        include: this.getVariantInclude(),
       })
       .catch((error: unknown) => {
         this.handleUniqueSkuError(error);
@@ -40,17 +41,7 @@ export class ProductVariantService {
         productId,
         deletedAt: null,
       },
-      include: {
-        attributeValues: {
-          include: {
-            attribute: true,
-            option: true,
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-      },
+      include: this.getVariantInclude(),
       orderBy: {
         createdAt: 'desc',
       },
@@ -73,6 +64,7 @@ export class ProductVariantService {
         where: {
           id: variantId,
         },
+        include: this.getVariantInclude(),
         data: {
           ...(dto.sku !== undefined && {
             sku: this.normalizeSku(dto.sku),
@@ -134,17 +126,7 @@ export class ProductVariantService {
         productId,
         deletedAt: null,
       },
-      include: {
-        attributeValues: {
-          include: {
-            attribute: true,
-            option: true,
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-      },
+      include: this.getVariantInclude(),
     });
 
     if (!variant) {
@@ -156,6 +138,33 @@ export class ProductVariantService {
 
   private normalizeSku(sku: string): string {
     return sku.trim().toUpperCase();
+  }
+
+  private getVariantInclude() {
+    return {
+      attributeValues: {
+        include: {
+          attribute: true,
+          option: true,
+        },
+        orderBy: {
+          createdAt: 'asc' as const,
+        },
+      },
+      images: {
+        where: {
+          deletedAt: null,
+        },
+        orderBy: [
+          {
+            sortOrder: 'asc' as const,
+          },
+          {
+            createdAt: 'asc' as const,
+          },
+        ],
+      },
+    };
   }
 
   private handleUniqueSkuError(error: unknown): void {

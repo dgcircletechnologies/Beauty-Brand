@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { UserShell } from "@/components/customer/user-shell";
 import { useAuth } from "@/contexts/auth-context";
@@ -8,9 +9,11 @@ import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
 
 export default function CartPage() {
+  const router = useRouter();
   const { accessToken } = useAuth();
   const { formatPrice } = useCurrency();
   const [cart, setCart] = useState<customerApi.CustomerCart | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
@@ -28,6 +31,11 @@ export default function CartPage() {
 
         if (isMounted) {
           setCart(nextCart);
+          setSelectedItemIds((currentIds) =>
+            currentIds.filter((itemId) =>
+              nextCart.items.some((item) => item.id === itemId),
+            ),
+          );
           setError(null);
         }
       } catch (caughtError) {
@@ -73,6 +81,38 @@ export default function CartPage() {
     }
   }
 
+  function toggleItemSelection(itemId: string) {
+    setSelectedItemIds((currentIds) =>
+      currentIds.includes(itemId)
+        ? currentIds.filter((currentId) => currentId !== itemId)
+        : [...currentIds, itemId],
+    );
+  }
+
+  function toggleAllSelection() {
+    if (!cart) {
+      return;
+    }
+
+    const availableItemIds = cart.items
+      .filter((item) => item.availability.isAvailable)
+      .map((item) => item.id);
+
+    setSelectedItemIds((currentIds) =>
+      currentIds.length === availableItemIds.length ? [] : availableItemIds,
+    );
+  }
+
+  function goToCheckout() {
+    const params = new URLSearchParams();
+
+    if (selectedItemIds.length) {
+      params.set("cartItemIds", selectedItemIds.join(","));
+    }
+
+    router.push(`/checkout${params.toString() ? `?${params.toString()}` : ""}`);
+  }
+
   async function removeItem(itemId: string) {
     if (!accessToken) {
       return;
@@ -114,8 +154,36 @@ export default function CartPage() {
         ) : cart?.items.length ? (
           <section className="cart-layout">
             <div className="cart-items">
+              <div className="cart-selection-bar">
+                <label className="checkbox-field">
+                  <input
+                    checked={
+                      selectedItemIds.length > 0 &&
+                      selectedItemIds.length ===
+                        cart.items.filter((item) => item.availability.isAvailable)
+                          .length
+                    }
+                    type="checkbox"
+                    onChange={toggleAllSelection}
+                  />
+                  <span>Select available items</span>
+                </label>
+                <p>
+                  {selectedItemIds.length
+                    ? `${selectedItemIds.length} selected for checkout`
+                    : "Nothing selected, checkout will include all products"}
+                </p>
+              </div>
               {cart.items.map((item) => (
                 <article className="cart-item" key={item.id}>
+                  <label className="cart-item-select" aria-label="Select item">
+                    <input
+                      checked={selectedItemIds.includes(item.id)}
+                      disabled={!item.availability.isAvailable}
+                      type="checkbox"
+                      onChange={() => toggleItemSelection(item.id)}
+                    />
+                  </label>
                   <div>
                     <h2>{item.product.name}</h2>
                     <p>SKU: {item.variant.sku}</p>
@@ -156,6 +224,17 @@ export default function CartPage() {
               <p className="eyebrow">Summary</p>
               <h2>{cart.itemCount} item(s)</h2>
               <strong>{formatPrice(cart.baseSubtotal)}</strong>
+              <button
+                className="primary-button"
+                disabled={cart.hasUnavailableItems && selectedItemIds.length === 0}
+                type="button"
+                onClick={goToCheckout}
+              >
+                {selectedItemIds.length ? "Checkout Selected" : "Checkout All"}
+              </button>
+              {cart.hasUnavailableItems && selectedItemIds.length === 0 ? (
+                <p>Select available items or remove unavailable ones first.</p>
+              ) : null}
             </aside>
           </section>
         ) : (

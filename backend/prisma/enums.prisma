@@ -25,6 +25,13 @@ enum UserStatus {
   DELETED
 }
 
+enum UserGender {
+  FEMALE
+  MALE
+  NON_BINARY
+  PREFER_NOT_TO_SAY
+}
+
 enum CartStatus {
   ACTIVE
   CONVERTED

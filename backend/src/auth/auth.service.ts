@@ -73,6 +73,8 @@ export class AuthService {
             firstName: dto.firstName.trim(),
             lastName: dto.lastName?.trim() || null,
             phone: dto.phone?.trim() || null,
+            gender: dto.gender ?? null,
+            age: dto.age ?? null,
           },
           select: this.userSelect(),
         });
@@ -675,6 +677,8 @@ export class AuthService {
       firstName: true,
       lastName: true,
       phone: true,
+      gender: true,
+      age: true,
       role: true,
       status: true,
       emailVerifiedAt: true,

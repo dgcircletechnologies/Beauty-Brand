@@ -1,5 +1,8 @@
 import { apiRequest } from "./client";
 
+import type { AuthUser } from "@/lib/auth/types";
+import type { UserGender } from "@/lib/auth/types";
+
 export type CustomerProductVariant = {
   id: string;
   sku: string;
@@ -7,6 +10,20 @@ export type CustomerProductVariant = {
   compareAtPrice: string | null;
   stockQuantity: number;
   isActive: boolean;
+  images?: CustomerProductImage[];
+};
+
+export type CustomerProductImage = {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  url: string;
+  altText: string | null;
+  sortOrder: number;
+  isPrimary: boolean;
+  width: number | null;
+  height: number | null;
+  format: string | null;
 };
 
 export type CustomerMetadataItem = {
@@ -59,6 +76,7 @@ export type CustomerProduct = {
   usageInstructions?: string | null;
   warnings?: string | null;
   isFeatured: boolean;
+  images?: CustomerProductImage[];
   variants?: CustomerProductVariant[];
   categories?: CustomerProductCategory[];
   ingredients?: CustomerProductIngredient[];
@@ -123,6 +141,219 @@ export type CustomerCart = {
   hasUnavailableItems: boolean;
 };
 
+export type CheckoutItem = {
+  cartItemId: string;
+  productId: string;
+  variantId: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  baseUnitPrice: number;
+  baseLineTotal: number;
+  displayUnitPrice: number;
+  displayLineTotal: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+export type CheckoutShippingRate = {
+  id: string;
+  name: string;
+  serviceCode: string | null;
+  calculation: string;
+  estimatedDaysMin: number | null;
+  estimatedDaysMax: number | null;
+  baseAmount: number;
+  displayAmount: number;
+  amount: number;
+  currency: {
+    code: string;
+    symbol: string | null;
+    decimalDigits: number;
+  };
+  zone: {
+    id: string;
+    name: string;
+    code: string;
+  };
+};
+
+export type CheckoutPreview = {
+  cartId: string;
+  currency: {
+    code: string;
+    symbol: string | null;
+    decimalDigits: number;
+  };
+  exchangeRate: number;
+  items: CheckoutItem[];
+  itemCount: number;
+  baseSubtotal: number;
+  displaySubtotal: number;
+  subtotal: number;
+  baseShippingAmount: number;
+  displayShippingAmount: number;
+  shippingAmount: number;
+  taxAmount: number;
+  discountAmount: number;
+  baseTotalAmount: number;
+  displayTotalAmount: number;
+  totalAmount: number;
+  shippingRates: CheckoutShippingRate[];
+  shippingAvailability: {
+    country: {
+      id: string;
+      countryCode: string;
+      countryName: string;
+    } | null;
+    zone: {
+      id: string;
+      name: string;
+      code: string;
+    } | null;
+    activeRateCount: number;
+    eligibleRateCount: number;
+    message: string;
+  };
+  selectedShippingRate: CheckoutShippingRate | null;
+  selectedCartItemIds: string[];
+};
+
+export type CustomerOrder = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  subtotal: number;
+  shippingAmount: number;
+  taxAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  baseSubtotal: number;
+  baseShippingAmount: number;
+  baseTaxAmount: number;
+  baseDiscountAmount: number;
+  baseTotalAmount: number;
+  displaySubtotal: number;
+  displayShippingAmount: number;
+  displayTaxAmount: number;
+  displayDiscountAmount: number;
+  displayTotalAmount: number;
+  customerEmail: string;
+  customerPhone: string | null;
+  placedAt: string | null;
+  createdAt: string;
+  displayCurrency: {
+    code: string;
+    symbol: string | null;
+    decimalDigits: number;
+  };
+  items: {
+    id: string;
+    productName: string;
+    variantLabel: string | null;
+    sku: string;
+    quantity: number;
+    baseUnitPrice: number;
+    baseLineTotal: number;
+    displayUnitPrice: number;
+    displayLineTotal: number;
+    unitPrice: number;
+    lineTotal: number;
+  }[];
+  addresses: {
+    id: string;
+    type: "SHIPPING" | "BILLING";
+    firstName: string;
+    lastName: string;
+    line1: string;
+    line2: string | null;
+    city: string;
+    stateOrProvince: string | null;
+    postalCode: string;
+    countryCode: string;
+    phone: string | null;
+  }[];
+  statusHistory: {
+    id: string;
+    fromStatus: string | null;
+    toStatus: string;
+    reason: string | null;
+    createdAt: string;
+  }[];
+  shipments: {
+    id: string;
+    status: string;
+    carrier: string | null;
+    service: string | null;
+    trackingNumber: string | null;
+    trackingUrl: string | null;
+    estimatedDeliveryAt: string | null;
+  }[];
+  cancellationRequests: {
+    id: string;
+    reason: string;
+    details: string | null;
+    status: string;
+    decisionNote: string | null;
+    requestedAt: string;
+    decidedAt: string | null;
+  }[];
+};
+
+export type CustomerAddress = {
+  id: string;
+  label: string | null;
+  firstName: string;
+  lastName: string;
+  company: string | null;
+  line1: string;
+  line2: string | null;
+  city: string;
+  stateOrProvince: string | null;
+  postalCode: string;
+  countryCode: string;
+  phone: string | null;
+  isDefaultShipping: boolean;
+  isDefaultBilling: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CustomerShippingCountry = {
+  id: string;
+  countryCode: string;
+  countryName: string;
+  zone: {
+    id: string;
+    name: string;
+    code: string;
+  };
+};
+
+export type UpdateProfilePayload = {
+  firstName: string;
+  lastName?: string;
+  phone?: string;
+  gender?: UserGender;
+  age?: number;
+};
+
+export type UpsertAddressPayload = {
+  label?: string;
+  firstName: string;
+  lastName: string;
+  company?: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  stateOrProvince?: string;
+  postalCode: string;
+  countryCode: string;
+  phone?: string;
+  isDefaultShipping?: boolean;
+  isDefaultBilling?: boolean;
+};
+
 function withAuth(accessToken: string) {
   return {
     Authorization: `Bearer ${accessToken}`,
@@ -172,6 +403,138 @@ export function updateCartItem(
 
 export function removeCartItem(accessToken: string, itemId: string) {
   return apiRequest<CustomerCart>(`/cart/items/${itemId}`, {
+    method: "DELETE",
+    headers: withAuth(accessToken),
+  });
+}
+
+export function getCheckoutPreview(
+  accessToken: string,
+  options: {
+    cartItemIds?: string[];
+    currencyCode?: string;
+    shippingAddressId?: string;
+    shippingRateId?: string;
+  } = {},
+) {
+  const params = new URLSearchParams();
+
+  if (options.cartItemIds?.length) {
+    params.set("cartItemIds", options.cartItemIds.join(","));
+  }
+
+  if (options.currencyCode) {
+    params.set("currencyCode", options.currencyCode);
+  }
+
+  if (options.shippingAddressId) {
+    params.set("shippingAddressId", options.shippingAddressId);
+  }
+
+  if (options.shippingRateId) {
+    params.set("shippingRateId", options.shippingRateId);
+  }
+
+  const query = params.toString();
+
+  return apiRequest<CheckoutPreview>(`/orders/checkout${query ? `?${query}` : ""}`, {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function createOrder(
+  accessToken: string,
+  payload: {
+    cartItemIds?: string[];
+    shippingAddressId: string;
+    billingAddressId?: string;
+    shippingRateId: string;
+    currencyCode?: string;
+    customerPhone?: string;
+  },
+) {
+  return apiRequest<CustomerOrder>("/orders/checkout", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getOrders(accessToken: string) {
+  return apiRequest<CustomerOrder[]>("/orders", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function requestOrderCancellation(
+  accessToken: string,
+  orderId: string,
+  payload: { reason: string; details?: string },
+) {
+  return apiRequest<CustomerOrder["cancellationRequests"][number]>(
+    `/orders/${orderId}/cancellation-requests`,
+    {
+      method: "POST",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function getProfile(accessToken: string) {
+  return apiRequest<AuthUser>("/account/profile", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function updateProfile(
+  accessToken: string,
+  payload: UpdateProfilePayload,
+) {
+  return apiRequest<AuthUser>("/account/profile", {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAddresses(accessToken: string) {
+  return apiRequest<CustomerAddress[]>("/account/addresses", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function getShippingCountries(accessToken: string) {
+  return apiRequest<CustomerShippingCountry[]>("/shipping/countries", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function createAddress(
+  accessToken: string,
+  payload: UpsertAddressPayload,
+) {
+  return apiRequest<CustomerAddress>("/account/addresses", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAddress(
+  accessToken: string,
+  addressId: string,
+  payload: UpsertAddressPayload,
+) {
+  return apiRequest<CustomerAddress>(`/account/addresses/${addressId}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAddress(accessToken: string, addressId: string) {
+  return apiRequest<CustomerAddress>(`/account/addresses/${addressId}`, {
     method: "DELETE",
     headers: withAuth(accessToken),
   });
