@@ -97,6 +97,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const isProductsActive = pathname.startsWith("/admin/products");
   const isCategoriesActive = pathname.startsWith("/admin/categories");
   const isAttributesActive = pathname.startsWith("/admin/attributes");
+  const isCurrenciesActive = pathname.startsWith("/admin/currencies");
   const isMetadataActive = pathname.startsWith("/admin/product-metadata");
 
   return (
@@ -132,15 +133,22 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <span>Analytics</span>
           </Link>
 
+          <Link
+            aria-current={pathname === "/admin/currencies" ? "page" : undefined}
+            className={isCurrenciesActive ? "active nav-link" : "nav-link"}
+            href="/admin/currencies"
+          >
+            <CurrencyIcon />
+            <span>Currencies</span>
+          </Link>
+
           <div className={`nav-group ${isCategoriesActive ? "active" : ""}`}>
             <div className="nav-group-row">
               <Link
                 aria-current={
                   pathname === "/admin/categories" ? "page" : undefined
                 }
-                className={
-                  isCategoriesActive ? "active nav-link" : "nav-link"
-                }
+                className={isCategoriesActive ? "active nav-link" : "nav-link"}
                 href="/admin/categories"
               >
                 <CategoryIcon />
@@ -219,7 +227,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className={`nav-group ${isProductsActive ? "active" : ""}`}>
             <div className="nav-group-row">
               <Link
-                aria-current={pathname === "/admin/products" ? "page" : undefined}
+                aria-current={
+                  pathname === "/admin/products" ? "page" : undefined
+                }
                 className={isProductsActive ? "active nav-link" : "nav-link"}
                 href="/admin/products"
               >
@@ -310,7 +320,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
 function PanelIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
       <path
         d="M4 5.5C4 4.67 4.67 4 5.5 4H18.5C19.33 4 20 4.67 20 5.5V18.5C20 19.33 19.33 20 18.5 20H5.5C4.67 20 4 19.33 4 18.5V5.5Z"
         stroke="currentColor"
@@ -323,7 +339,13 @@ function PanelIcon() {
 
 function ChartIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
       <path
         d="M5 19V11"
         stroke="currentColor"
@@ -348,7 +370,13 @@ function ChartIcon() {
 
 function BoxIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
       <path
         d="M4.5 8.25L12 4L19.5 8.25V16.25L12 20.5L4.5 16.25V8.25Z"
         stroke="currentColor"
@@ -368,7 +396,13 @@ function BoxIcon() {
 
 function DatabaseIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
       <path
         d="M5 7C5 5.34 8.13 4 12 4C15.87 4 19 5.34 19 7C19 8.66 15.87 10 12 10C8.13 10 5 8.66 5 7Z"
         stroke="currentColor"
@@ -388,9 +422,40 @@ function DatabaseIcon() {
   );
 }
 
+function CurrencyIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path
+        d="M12 3V21"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M17 7.5C16.17 6.57 14.76 6 12.95 6H10.75C8.68 6 7 7.34 7 9C7 10.66 8.68 12 10.75 12H13.25C15.32 12 17 13.34 17 15C17 16.66 15.32 18 13.25 18H11.05C9.24 18 7.83 17.43 7 16.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 function CategoryIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
       <path
         d="M4 7C4 5.9 4.9 5 6 5H10L12 7H18C19.1 7 20 7.9 20 9V17C20 18.1 19.1 19 18 19H6C4.9 19 4 18.1 4 17V7Z"
         stroke="currentColor"
@@ -409,7 +474,13 @@ function CategoryIcon() {
 
 function SlidersIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
       <path
         d="M5 7H13"
         stroke="currentColor"
@@ -452,7 +523,13 @@ function SlidersIcon() {
 
 function ChevronIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      viewBox="0 0 24 24"
+      width="18"
+    >
       <path
         d="M9 6L15 12L9 18"
         stroke="currentColor"

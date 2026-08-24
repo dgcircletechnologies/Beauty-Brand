@@ -6,6 +6,8 @@ import { DatabaseModule } from './database/database.module';
 import { ConfigModule } from '@nestjs/config';
 import { AdminModule } from './admin/admin.module';
 import { PublicModule } from './public/public.module';
+import { CurrencyModule } from './currency/currency.module';
+import { CartModule } from './cart/cart.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { PublicModule } from './public/public.module';
     DatabaseModule,
     CommonModule,
     AuthModule,
+    CurrencyModule,
+    CartModule,
     AdminModule,
     PublicModule,
   ],

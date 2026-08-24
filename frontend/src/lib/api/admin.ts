@@ -212,6 +212,48 @@ export type SetProductAttributeValuePayload = {
   optionIds?: string[];
 };
 
+export type AdminCurrency = {
+  code: string;
+  name: string;
+  symbol: string | null;
+  decimalDigits: number;
+  status: "ACTIVE" | "INACTIVE";
+  isBase: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateAdminCurrencyPayload = {
+  code: string;
+  name: string;
+  symbol?: string;
+  decimalDigits?: number;
+  status?: AdminCurrency["status"];
+  isBase?: boolean;
+};
+
+export type AdminExchangeRate = {
+  id: string;
+  baseCurrencyCode: string;
+  quoteCurrencyCode: string;
+  rate: string;
+  provider: string;
+  effectiveAt: string;
+  expiresAt: string | null;
+  createdAt: string;
+  baseCurrency: AdminCurrency;
+  quoteCurrency: AdminCurrency;
+};
+
+export type CreateAdminExchangeRatePayload = {
+  baseCurrencyCode: string;
+  quoteCurrencyCode: string;
+  rate: number;
+  provider: string;
+  effectiveAt: string;
+  expiresAt?: string;
+};
+
 function withAuth(accessToken: string) {
   return {
     Authorization: `Bearer ${accessToken}`,
@@ -432,4 +474,50 @@ export function deleteProductMetadataItem(
       headers: withAuth(accessToken),
     },
   );
+}
+
+export function getAdminCurrencies(accessToken: string) {
+  return apiRequest<AdminCurrency[]>("/admin/currencies", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function createAdminCurrency(
+  accessToken: string,
+  payload: CreateAdminCurrencyPayload,
+) {
+  return apiRequest<AdminCurrency>("/admin/currencies", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminCurrency(
+  accessToken: string,
+  code: string,
+  payload: Partial<CreateAdminCurrencyPayload>,
+) {
+  return apiRequest<AdminCurrency>(`/admin/currencies/${code}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAdminExchangeRates(accessToken: string) {
+  return apiRequest<AdminExchangeRate[]>("/admin/currencies/exchange-rates", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function createAdminExchangeRate(
+  accessToken: string,
+  payload: CreateAdminExchangeRatePayload,
+) {
+  return apiRequest<AdminExchangeRate>("/admin/currencies/exchange-rates", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
 }

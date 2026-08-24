@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation";
+import { ProductDashboard } from "@/components/customer/product-dashboard";
+import { UserShell } from "@/components/customer/user-shell";
 
 export default function Home() {
-  redirect("/login");
+  return (
+    <UserShell>
+      <ProductDashboard />
+    </UserShell>
+  );
 }
