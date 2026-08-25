@@ -4,6 +4,7 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -47,8 +48,8 @@ export class AuthController {
 
   @Post('login')
   @ResponseMessage('Login successful')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() request: Request) {
+    return this.authService.login(dto, request);
   }
 
   @Post('refresh')
@@ -60,6 +61,7 @@ export class AuthController {
     return this.authService.refresh(
       request.user.id,
       dto,
+      request,
     );
   }
 

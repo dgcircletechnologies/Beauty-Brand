@@ -21,19 +21,28 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email"));
 
     try {
       const session = await login({
-        email: String(formData.get("email")),
+        email,
         password: String(formData.get("password")),
       });
 
       router.replace(getPostLoginPath(session.user.role));
     } catch (caughtError) {
-      setError(
+      const message =
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to login right now",
+          : "Unable to login right now";
+
+      if (message.toLowerCase().includes("verify")) {
+        router.replace(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
+      setError(
+        message,
       );
     } finally {
       setIsSubmitting(false);

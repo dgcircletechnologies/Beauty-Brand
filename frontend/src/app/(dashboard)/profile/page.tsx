@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 import { UserShell } from "@/components/customer/user-shell";
@@ -106,12 +107,21 @@ export default function ProfilePage() {
           </div>
         </section>
 
+        <nav className="profile-tabs" aria-label="Profile sections">
+          <Link className="active" href="/profile">
+            Profile
+          </Link>
+          <Link href="/profile/security">Password</Link>
+          <Link href="/profile/sessions">Account Status</Link>
+          <Link href="/addresses">Addresses</Link>
+        </nav>
+
         {isLoading ? (
           <section className="empty-surface">
             <h2>Loading profile...</h2>
           </section>
         ) : (
-          <form className="account-form" onSubmit={handleSubmit}>
+          <form className="account-form profile-form" onSubmit={handleSubmit}>
             <div className="split-fields">
               <label>
                 First name

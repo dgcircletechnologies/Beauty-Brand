@@ -84,6 +84,18 @@ export function UserNavbar() {
                   Profile
                 </Link>
                 <Link
+                  href="/profile/security"
+                  onClick={() => setIsAccountMenuOpen(false)}
+                >
+                  Password
+                </Link>
+                <Link
+                  href="/profile/sessions"
+                  onClick={() => setIsAccountMenuOpen(false)}
+                >
+                  Account Status
+                </Link>
+                <Link
                   href="/addresses"
                   onClick={() => setIsAccountMenuOpen(false)}
                 >

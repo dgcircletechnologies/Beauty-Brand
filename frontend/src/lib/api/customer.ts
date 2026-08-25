@@ -349,6 +349,23 @@ export type UpdateProfilePayload = {
   age?: number;
 };
 
+export type AccountSessions = {
+  activeSessionCount: number;
+  sessions: {
+    id: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+    deviceLabel: string | null;
+    location: string | null;
+    lastUsedAt: string | null;
+    createdAt: string;
+    expiresAt: string;
+    revokedAt: string | null;
+    isCurrent: boolean;
+    isActive: boolean;
+  }[];
+};
+
 export type UpsertAddressPayload = {
   label?: string;
   firstName: string;
@@ -540,6 +557,35 @@ export function updateProfile(
     method: "PATCH",
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),
+  });
+}
+
+export function changePassword(
+  accessToken: string,
+  payload: { currentPassword: string; newPassword: string },
+) {
+  return apiRequest<{ passwordChanged: boolean }>("/account/password", {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAccountSessions(
+  accessToken: string,
+  refreshToken: string,
+) {
+  return apiRequest<AccountSessions>("/account/sessions", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify({ refreshToken }),
+  });
+}
+
+export function revokeAccountSession(accessToken: string, sessionId: string) {
+  return apiRequest<{ revoked: boolean }>(`/account/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: withAuth(accessToken),
   });
 }
 

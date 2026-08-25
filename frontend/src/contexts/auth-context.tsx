@@ -32,11 +32,14 @@ type AuthContextValue = {
   isBootstrapping: boolean;
   login: (payload: LoginPayload) => Promise<AuthSession>;
   signup: (payload: SignupPayload) => Promise<void>;
+  verifyEmail: (payload: { token: string }) => Promise<void>;
+  resendVerificationEmail: (payload: { email: string }) => Promise<void>;
   forgotPassword: (payload: ForgotPasswordPayload) => Promise<void>;
   resetPassword: (payload: ResetPasswordPayload) => Promise<void>;
   refreshSession: () => Promise<void>;
   updateUser: (user: AuthUser) => void;
   logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -134,6 +137,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await authApi.signup(payload);
   }, []);
 
+  const verifyEmail = useCallback(async (payload: { token: string }) => {
+    await authApi.verifyEmail(payload);
+  }, []);
+
+  const resendVerificationEmail = useCallback(
+    async (payload: { email: string }) => {
+      await authApi.resendVerificationEmail(payload);
+    },
+    [],
+  );
+
   const forgotPassword = useCallback(async (payload: ForgotPasswordPayload) => {
     await authApi.forgotPassword(payload);
   }, []);
@@ -226,6 +240,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     persistSession(null);
   }, [persistSession, session]);
 
+  const logoutAll = useCallback(async () => {
+    if (session?.accessToken) {
+      await authApi.logoutAll(session.accessToken).catch(() => undefined);
+    }
+
+    persistSession(null);
+  }, [persistSession, session]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user: session?.user ?? null,
@@ -235,22 +257,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isBootstrapping,
       login,
       signup,
+      verifyEmail,
+      resendVerificationEmail,
       forgotPassword,
       resetPassword,
       refreshSession,
       updateUser,
       logout,
+      logoutAll,
     }),
     [
       forgotPassword,
       isBootstrapping,
       login,
       logout,
+      logoutAll,
       refreshSession,
+      resendVerificationEmail,
       resetPassword,
       session,
       signup,
       updateUser,
+      verifyEmail,
     ],
   );
 

@@ -1,15 +1,16 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { PasswordField } from "@/components/auth/password-field";
 import { useAuth } from "@/contexts/auth-context";
 
 export default function SignupPage() {
+  const router = useRouter();
   const { signup } = useAuth();
   const [error, setError] = useState<string | null>(null);
-  const [isAccountCreated, setIsAccountCreated] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -18,6 +19,7 @@ export default function SignupPage() {
     setIsSubmitting(true);
 
     const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email"));
     const password = String(formData.get("password"));
     const confirmPassword = String(formData.get("confirmPassword"));
 
@@ -31,7 +33,7 @@ export default function SignupPage() {
       await signup({
         firstName: String(formData.get("firstName")),
         lastName: String(formData.get("lastName") || ""),
-        email: String(formData.get("email")),
+        email,
         phone: String(formData.get("phone") || ""),
         gender:
           String(formData.get("gender") || "") === ""
@@ -46,7 +48,7 @@ export default function SignupPage() {
         password,
       });
 
-      setIsAccountCreated(true);
+      router.replace(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -66,13 +68,7 @@ export default function SignupPage() {
       footerHref="/login"
       footerAction="Login"
     >
-      {isAccountCreated ? (
-        <div className="auth-message">
-          <h2>Verification email sent</h2>
-          <p>Please verify your account from the email we just sent you.</p>
-        </div>
-      ) : (
-        <form className="auth-form" onSubmit={handleSubmit}>
+      <form className="auth-form" onSubmit={handleSubmit}>
           <div className="split-fields">
             <label>
               First name
@@ -127,8 +123,7 @@ export default function SignupPage() {
           >
             {isSubmitting ? "Creating..." : "Create Account"}
           </button>
-        </form>
-      )}
+      </form>
     </AuthCard>
   );
 }

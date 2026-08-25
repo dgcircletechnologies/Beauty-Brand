@@ -21,6 +21,20 @@ export function signup(payload: SignupPayload) {
   });
 }
 
+export function verifyEmail(payload: { token: string }) {
+  return apiRequest<unknown>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resendVerificationEmail(payload: { email: string }) {
+  return apiRequest<unknown>("/auth/resend-verification-email", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function forgotPassword(payload: ForgotPasswordPayload) {
   return apiRequest<unknown>("/auth/forgot-password", {
     method: "POST",
@@ -59,5 +73,14 @@ export function logout(refreshTokenValue: string, accessToken: string) {
     body: JSON.stringify({
       refreshToken: refreshTokenValue,
     }),
+  });
+}
+
+export function logoutAll(accessToken: string) {
+  return apiRequest<unknown>("/auth/logout-all", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 }

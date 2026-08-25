@@ -1,6 +1,6 @@
 import {
-  ForbiddenException,
   ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -9,11 +9,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import {
-  createHmac,
-  randomBytes,
-  timingSafeEqual,
-} from 'crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import type { Request } from 'express';
 
 import { PrismaService } from 'src/database/prisma.service';
 import { MailService } from '../common/mail/mail.service';
@@ -52,45 +49,37 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException(
-        'An account with this email already exists',
-      );
+      throw new ConflictException('An account with this email already exists');
     }
 
-    const passwordHash = await bcrypt.hash(
-      dto.password,
-      12,
-    );
+    const passwordHash = await bcrypt.hash(dto.password, 12);
 
     const verificationToken = this.generatePlainToken();
 
-    const user = await this.prisma.$transaction(
-      async (tx) => {
-        const createdUser = await tx.user.create({
-          data: {
-            email,
-            passwordHash,
-            firstName: dto.firstName.trim(),
-            lastName: dto.lastName?.trim() || null,
-            phone: dto.phone?.trim() || null,
-            gender: dto.gender ?? null,
-            age: dto.age ?? null,
-          },
-          select: this.userSelect(),
-        });
+    const user = await this.prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName?.trim() || null,
+          phone: dto.phone?.trim() || null,
+          gender: dto.gender ?? null,
+          age: dto.age ?? null,
+        },
+        select: this.userSelect(),
+      });
 
-        await tx.emailVerificationToken.create({
-          data: {
-            userId: createdUser.id,
-            tokenHash: this.hashToken(verificationToken),
-            expiresAt:
-              this.getEmailVerificationExpiryDate(),
-          },
-        });
+      await tx.emailVerificationToken.create({
+        data: {
+          userId: createdUser.id,
+          tokenHash: this.hashToken(verificationToken),
+          expiresAt: this.getEmailVerificationExpiryDate(),
+        },
+      });
 
-        return createdUser;
-      },
-    );
+      return createdUser;
+    });
 
     await this.mailService.sendVerificationEmail({
       to: user.email,
@@ -101,7 +90,7 @@ export class AuthService {
     return user;
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, request?: Request) {
     const email = dto.email.trim().toLowerCase();
 
     const user = await this.prisma.user.findUnique({
@@ -111,15 +100,11 @@ export class AuthService {
     });
 
     if (!user?.passwordHash) {
-      throw new UnauthorizedException(
-        'Invalid email or password',
-      );
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     if (!user.emailVerifiedAt) {
-      throw new ForbiddenException(
-        'Please verify your email first',
-      );
+      throw new ForbiddenException('Please verify your email first');
     }
 
     const passwordMatches = await bcrypt.compare(
@@ -128,9 +113,7 @@ export class AuthService {
     );
 
     if (!passwordMatches) {
-      throw new UnauthorizedException(
-        'Invalid email or password',
-      );
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     const accessToken = await this.generateAccessToken({
@@ -149,6 +132,7 @@ export class AuthService {
           userId: user.id,
           tokenHash: this.hashRefreshToken(refreshToken),
           expiresAt: this.getRefreshTokenExpiryDate(),
+          ...this.getSessionMetadata(request),
         },
       });
 
@@ -178,30 +162,23 @@ export class AuthService {
     };
   }
 
-  async refresh(userId: string, dto: RefreshTokenDto) {
-    const payload = await this.verifyRefreshToken(
-      dto.refreshToken,
-    );
+  async refresh(userId: string, dto: RefreshTokenDto, request?: Request) {
+    const payload = await this.verifyRefreshToken(dto.refreshToken);
 
     if (payload.type !== 'refresh') {
-      throw new UnauthorizedException(
-        'Invalid refresh token',
-      );
+      throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const tokenHash = this.hashRefreshToken(
-      dto.refreshToken,
-    );
+    const tokenHash = this.hashRefreshToken(dto.refreshToken);
 
-    const storedToken =
-      await this.prisma.refreshToken.findUnique({
-        where: {
-          tokenHash,
-        },
-        include: {
-          user: true,
-        },
-      });
+    const storedToken = await this.prisma.refreshToken.findUnique({
+      where: {
+        tokenHash,
+      },
+      include: {
+        user: true,
+      },
+    });
 
     if (
       !storedToken ||
@@ -211,26 +188,26 @@ export class AuthService {
       storedToken.expiresAt <= new Date() ||
       storedToken.user.deletedAt
     ) {
-      throw new UnauthorizedException(
-        'Invalid refresh token',
-      );
+      throw new UnauthorizedException('Invalid refresh token');
     }
 
-    if (
-      !this.safeHashCompare(
-        tokenHash,
-        storedToken.tokenHash,
-      )
-    ) {
-      throw new UnauthorizedException(
-        'Invalid refresh token',
-      );
+    if (!this.safeHashCompare(tokenHash, storedToken.tokenHash)) {
+      throw new UnauthorizedException('Invalid refresh token');
     }
 
     const accessToken = await this.generateAccessToken({
       id: storedToken.user.id,
       email: storedToken.user.email,
       role: storedToken.user.role,
+    });
+
+    await this.prisma.refreshToken.update({
+      where: {
+        id: storedToken.id,
+      },
+      data: {
+        ...this.getSessionMetadata(request),
+      },
     });
 
     return {
@@ -240,22 +217,17 @@ export class AuthService {
   }
 
   async logout(userId: string, dto: LogoutDto) {
-    const tokenHash = this.hashRefreshToken(
-      dto.refreshToken,
-    );
+    const tokenHash = this.hashRefreshToken(dto.refreshToken);
 
-    const result =
-      await this.prisma.refreshToken.deleteMany({
-        where: {
-          userId,
-          tokenHash,
-        },
-      });
+    const result = await this.prisma.refreshToken.deleteMany({
+      where: {
+        userId,
+        tokenHash,
+      },
+    });
 
     if (result.count !== 1) {
-      throw new UnauthorizedException(
-        'Invalid refresh token',
-      );
+      throw new UnauthorizedException('Invalid refresh token');
     }
 
     return {
@@ -278,21 +250,18 @@ export class AuthService {
   async verifyEmail(dto: VerifyEmailDto) {
     const tokenHash = this.hashToken(dto.token);
 
-    const storedToken =
-      await this.prisma.emailVerificationToken.findUnique({
-        where: {
-          tokenHash,
-        },
-      });
+    const storedToken = await this.prisma.emailVerificationToken.findUnique({
+      where: {
+        tokenHash,
+      },
+    });
 
     if (
       !storedToken ||
       storedToken.consumedAt ||
       storedToken.expiresAt <= new Date()
     ) {
-      throw new UnauthorizedException(
-        'Invalid or expired verification token',
-      );
+      throw new UnauthorizedException('Invalid or expired verification token');
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -316,14 +285,29 @@ export class AuthService {
       });
     });
 
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: storedToken.userId,
+      },
+      select: {
+        email: true,
+        firstName: true,
+      },
+    });
+
+    if (user) {
+      await this.mailService.sendWelcomeEmail({
+        to: user.email,
+        name: user.firstName,
+      });
+    }
+
     return {
       verified: true,
     };
   }
 
-  async resendVerificationEmail(
-    dto: ResendVerificationEmailDto,
-  ) {
+  async resendVerificationEmail(dto: ResendVerificationEmailDto) {
     const email = dto.email.trim().toLowerCase();
 
     const user = await this.prisma.user.findUnique({
@@ -339,18 +323,11 @@ export class AuthService {
       },
     });
 
-    if (
-      !user ||
-      user.deletedAt ||
-      user.emailVerifiedAt
-    ) {
+    if (!user || user.deletedAt || user.emailVerifiedAt) {
       return this.verificationEmailResponse();
     }
 
-    await this.ensureEmailSendLimitNotExceeded(
-      'emailVerification',
-      user.id,
-    );
+    await this.ensureEmailSendLimitNotExceeded('emailVerification', user.id);
 
     const verificationToken = this.generatePlainToken();
 
@@ -390,10 +367,7 @@ export class AuthService {
       return this.passwordResetRequestResponse();
     }
 
-    await this.ensureEmailSendLimitNotExceeded(
-      'passwordReset',
-      user.id,
-    );
+    await this.ensureEmailSendLimitNotExceeded('passwordReset', user.id);
 
     const resetToken = this.generatePlainToken();
 
@@ -417,27 +391,21 @@ export class AuthService {
   async resetPassword(dto: ResetPasswordDto) {
     const tokenHash = this.hashToken(dto.token);
 
-    const storedToken =
-      await this.prisma.passwordResetToken.findUnique({
-        where: {
-          tokenHash,
-        },
-      });
+    const storedToken = await this.prisma.passwordResetToken.findUnique({
+      where: {
+        tokenHash,
+      },
+    });
 
     if (
       !storedToken ||
       storedToken.consumedAt ||
       storedToken.expiresAt <= new Date()
     ) {
-      throw new UnauthorizedException(
-        'Invalid or expired reset token',
-      );
+      throw new UnauthorizedException('Invalid or expired reset token');
     }
 
-    const passwordHash = await bcrypt.hash(
-      dto.password,
-      12,
-    );
+    const passwordHash = await bcrypt.hash(dto.password, 12);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -483,27 +451,19 @@ export class AuthService {
     };
 
     return this.jwtService.signAsync(payload, {
-      secret:
-        this.configService.getOrThrow<string>(
-          'JWT_ACCESS_SECRET',
-        ),
+      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
       expiresIn: this.getAccessTokenLifetime(),
     });
   }
 
-  private async generateRefreshToken(user: {
-    id: string;
-  }): Promise<string> {
+  private async generateRefreshToken(user: { id: string }): Promise<string> {
     const payload: RefreshTokenPayload = {
       sub: user.id,
       type: 'refresh',
     };
 
     return this.jwtService.signAsync(payload, {
-      secret:
-        this.configService.getOrThrow<string>(
-          'JWT_REFRESH_SECRET',
-        ),
+      secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       expiresIn: this.getRefreshTokenLifetime(),
     });
   }
@@ -512,60 +472,36 @@ export class AuthService {
     token: string,
   ): Promise<RefreshTokenPayload> {
     try {
-      return await this.jwtService.verifyAsync<
-        RefreshTokenPayload
-      >(token, {
-        secret:
-          this.configService.getOrThrow<string>(
-            'JWT_REFRESH_SECRET',
-          ),
+      return await this.jwtService.verifyAsync<RefreshTokenPayload>(token, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       });
     } catch {
-      throw new UnauthorizedException(
-        'Invalid refresh token',
-      );
+      throw new UnauthorizedException('Invalid refresh token');
     }
   }
 
   private hashRefreshToken(token: string): string {
     const secret =
-      this.configService.get<string>(
-        'REFRESH_TOKEN_HASH_SECRET',
-      ) ??
-      this.configService.getOrThrow<string>(
-        'JWT_REFRESH_SECRET',
-      );
+      this.configService.get<string>('REFRESH_TOKEN_HASH_SECRET') ??
+      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
 
-    return createHmac('sha256', secret)
-      .update(token)
-      .digest('hex');
+    return createHmac('sha256', secret).update(token).digest('hex');
   }
 
   private hashToken(token: string): string {
     const secret =
-      this.configService.get<string>(
-        'ONE_TIME_TOKEN_HASH_SECRET',
-      ) ??
-      this.configService.get<string>(
-        'REFRESH_TOKEN_HASH_SECRET',
-      ) ??
-      this.configService.getOrThrow<string>(
-        'JWT_REFRESH_SECRET',
-      );
+      this.configService.get<string>('ONE_TIME_TOKEN_HASH_SECRET') ??
+      this.configService.get<string>('REFRESH_TOKEN_HASH_SECRET') ??
+      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
 
-    return createHmac('sha256', secret)
-      .update(token)
-      .digest('hex');
+    return createHmac('sha256', secret).update(token).digest('hex');
   }
 
   private generatePlainToken(): string {
     return randomBytes(32).toString('base64url');
   }
 
-  private safeHashCompare(
-    left: string,
-    right: string,
-  ): boolean {
+  private safeHashCompare(left: string, right: string): boolean {
     const leftBuffer = Buffer.from(left);
     const rightBuffer = Buffer.from(right);
 
@@ -576,10 +512,7 @@ export class AuthService {
   }
 
   private getAccessTokenLifetime(): number {
-    return this.getPositiveNumberConfig(
-      'JWT_ACCESS_EXPIRES_IN_SECONDS',
-      900,
-    );
+    return this.getPositiveNumberConfig('JWT_ACCESS_EXPIRES_IN_SECONDS', 900);
   }
 
   private getRefreshTokenLifetime(): number {
@@ -590,10 +523,83 @@ export class AuthService {
   }
 
   private getRefreshTokenExpiryDate(): Date {
-    return new Date(
-      Date.now() +
-        this.getRefreshTokenLifetime() * 1000,
+    return new Date(Date.now() + this.getRefreshTokenLifetime() * 1000);
+  }
+
+  private getSessionMetadata(request?: Request) {
+    const userAgent =
+      this.getHeaderValue(request, 'user-agent')?.slice(0, 500) ?? null;
+
+    return {
+      ipAddress: this.getRequestIp(request),
+      userAgent,
+      deviceLabel: this.getDeviceLabel(userAgent),
+      location: this.getRequestLocation(request),
+      lastUsedAt: new Date(),
+    };
+  }
+
+  private getRequestIp(request?: Request): string | null {
+    const forwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
+    const forwardedIp = forwardedFor?.split(',')[0]?.trim();
+
+    return (
+      forwardedIp ||
+      request?.socket.remoteAddress?.replace('::ffff:', '') ||
+      null
     );
+  }
+
+  private getRequestLocation(request?: Request): string | null {
+    const city =
+      this.getHeaderValue(request, 'x-vercel-ip-city') ||
+      this.getHeaderValue(request, 'x-city');
+    const region =
+      this.getHeaderValue(request, 'x-vercel-ip-country-region') ||
+      this.getHeaderValue(request, 'x-region');
+    const country =
+      this.getHeaderValue(request, 'cf-ipcountry') ||
+      this.getHeaderValue(request, 'x-vercel-ip-country') ||
+      this.getHeaderValue(request, 'x-country-code');
+
+    return [city, region, country].filter(Boolean).join(', ') || null;
+  }
+
+  private getHeaderValue(request: Request | undefined, key: string) {
+    const value = request?.headers[key];
+
+    return Array.isArray(value) ? value[0] : value;
+  }
+
+  private getDeviceLabel(userAgent: string | null): string | null {
+    if (!userAgent) {
+      return null;
+    }
+
+    const browser =
+      userAgent.includes('Edg/')
+        ? 'Microsoft Edge'
+        : userAgent.includes('Chrome/')
+          ? 'Chrome'
+          : userAgent.includes('Firefox/')
+            ? 'Firefox'
+            : userAgent.includes('Safari/')
+              ? 'Safari'
+              : 'Browser';
+    const platform =
+      userAgent.includes('Windows')
+        ? 'Windows'
+        : userAgent.includes('Macintosh')
+          ? 'macOS'
+          : userAgent.includes('Android')
+            ? 'Android'
+            : userAgent.includes('iPhone') || userAgent.includes('iPad')
+              ? 'iOS'
+              : userAgent.includes('Linux')
+                ? 'Linux'
+                : null;
+
+    return platform ? `${browser} on ${platform}` : browser;
   }
 
   private getEmailVerificationExpiryDate(): Date {
@@ -610,15 +616,9 @@ export class AuthService {
     );
   }
 
-  private getExpiryDateFromMinutesConfig(
-    key: string,
-    fallback: number,
-  ): Date {
+  private getExpiryDateFromMinutesConfig(key: string, fallback: number): Date {
     return new Date(
-      Date.now() +
-        this.getPositiveNumberConfig(key, fallback) *
-          60 *
-          1000,
+      Date.now() + this.getPositiveNumberConfig(key, fallback) * 60 * 1000,
     );
   }
 
@@ -626,9 +626,7 @@ export class AuthService {
     type: 'emailVerification' | 'passwordReset',
     userId: string,
   ) {
-    const createdAfter = new Date(
-      Date.now() - 24 * 60 * 60 * 1000,
-    );
+    const createdAfter = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const count =
       type === 'emailVerification'
@@ -657,17 +655,10 @@ export class AuthService {
     }
   }
 
-  private getPositiveNumberConfig(
-    key: string,
-    fallback: number,
-  ): number {
-    const value = Number(
-      this.configService.get<string>(key) ?? fallback,
-    );
+  private getPositiveNumberConfig(key: string, fallback: number): number {
+    const value = Number(this.configService.get<string>(key) ?? fallback);
 
-    return Number.isFinite(value) && value > 0
-      ? value
-      : fallback;
+    return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
   private userSelect() {
@@ -688,15 +679,13 @@ export class AuthService {
 
   private passwordResetRequestResponse() {
     return {
-      message:
-        'If this email exists, a reset link has been sent',
+      message: 'If this email exists, a reset link has been sent',
     };
   }
 
   private verificationEmailResponse() {
     return {
-      message:
-        'If this account needs verification, an email has been sent',
+      message: 'If this account needs verification, an email has been sent',
     };
   }
 }

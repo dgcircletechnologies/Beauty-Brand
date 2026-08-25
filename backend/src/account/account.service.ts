@@ -1,12 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createHmac } from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 import { PrismaService } from '../database/prisma.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpsertAddressDto } from './dto/upsert-address.dto';
 
 @Injectable()
 export class AccountService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   getProfile(userId: string) {
     return this.prisma.user.findFirstOrThrow({
@@ -98,6 +110,105 @@ export class AccountService {
     });
   }
 
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        passwordHash: true,
+      },
+    });
+
+    if (!user?.passwordHash) {
+      throw new NotFoundException('User not found');
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const nextPasswordHash = await bcrypt.hash(dto.newPassword, 12);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          passwordHash: nextPasswordHash,
+        },
+      }),
+      this.prisma.refreshToken.deleteMany({
+        where: {
+          userId,
+        },
+      }),
+    ]);
+
+    return {
+      passwordChanged: true,
+    };
+  }
+
+  async getSessions(userId: string, currentRefreshToken?: string) {
+    const currentTokenHash = currentRefreshToken
+      ? this.hashRefreshToken(currentRefreshToken)
+      : null;
+    const sessions = await this.prisma.refreshToken.findMany({
+      where: {
+        userId,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+    const now = new Date();
+
+    return {
+      activeSessionCount: sessions.filter(
+        (session) => !session.revokedAt && session.expiresAt > now,
+      ).length,
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        ipAddress: session.ipAddress,
+        userAgent: session.userAgent,
+        deviceLabel: session.deviceLabel,
+        location: session.location,
+        lastUsedAt: session.lastUsedAt,
+        createdAt: session.createdAt,
+        expiresAt: session.expiresAt,
+        revokedAt: session.revokedAt,
+        isCurrent: currentTokenHash === session.tokenHash,
+        isActive: !session.revokedAt && session.expiresAt > now,
+      })),
+    };
+  }
+
+  async revokeSession(userId: string, sessionId: string) {
+    const result = await this.prisma.refreshToken.deleteMany({
+      where: {
+        id: sessionId,
+        userId,
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new BadRequestException('Session not found');
+    }
+
+    return {
+      revoked: true,
+    };
+  }
+
   private async ensureAddressBelongsToUser(userId: string, addressId: string) {
     const address = await this.prisma.address.findFirst({
       where: {
@@ -186,5 +297,13 @@ export class AccountService {
   private nullableTrim(value?: string): string | null {
     const trimmed = value?.trim();
     return trimmed || null;
+  }
+
+  private hashRefreshToken(token: string): string {
+    const secret =
+      this.configService.get<string>('REFRESH_TOKEN_HASH_SECRET') ??
+      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
+
+    return createHmac('sha256', secret).update(token).digest('hex');
   }
 }
