@@ -484,6 +484,28 @@ export function uploadAdminProductImages(
   });
 }
 
+export function uploadAdminVariantImages(
+  accessToken: string,
+  productId: string,
+  variantId: string,
+  files: File[],
+) {
+  const formData = new FormData();
+
+  files.forEach((file) => {
+    formData.append("images", file);
+  });
+
+  return apiRequest<AdminProductImage[]>(
+    `/admin/products/${productId}/variants/${variantId}/images`,
+    {
+      method: "POST",
+      headers: withAuth(accessToken),
+      body: formData,
+    },
+  );
+}
+
 export function updateAdminProductImage(
   accessToken: string,
   productId: string,

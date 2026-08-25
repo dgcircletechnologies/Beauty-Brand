@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { ProductVariantForm } from "@/components/admin/product-variant-form";
+import {
+  ProductVariantForm,
+  ProductVariantFormPayload,
+} from "@/components/admin/product-variant-form";
 import { useAuth } from "@/contexts/auth-context";
 import {
   AdminCategory,
   AdminProduct,
   AdminProductDetail,
-  CreateAdminProductVariantPayload,
   assignAdminVariantImages,
   createAdminProductVariant,
   deleteAdminProductImage,
@@ -17,6 +19,7 @@ import {
   getAdminProducts,
   updateAdminProductImage,
   uploadAdminProductImages,
+  uploadAdminVariantImages,
 } from "@/lib/api/admin";
 
 export default function AllProductsPage() {
@@ -141,7 +144,7 @@ export default function AllProductsPage() {
     };
   }, [accessToken, selectedProductId]);
 
-  async function handleCreateVariant(payload: CreateAdminProductVariantPayload) {
+  async function handleCreateVariant(payload: ProductVariantFormPayload) {
     if (!accessToken || !selectedProductId) {
       return;
     }
@@ -150,7 +153,29 @@ export default function AllProductsPage() {
     setIsVariantSubmitting(true);
 
     try {
-      await createAdminProductVariant(accessToken, selectedProductId, payload);
+      const { imageFiles = [] } = payload;
+      const variantPayload = {
+        sku: payload.sku,
+        price: payload.price,
+        compareAtPrice: payload.compareAtPrice,
+        stockQuantity: payload.stockQuantity,
+        isActive: payload.isActive,
+      };
+      const variant = await createAdminProductVariant(
+        accessToken,
+        selectedProductId,
+        variantPayload,
+      );
+
+      if (imageFiles.length) {
+        await uploadAdminVariantImages(
+          accessToken,
+          selectedProductId,
+          variant.id,
+          imageFiles,
+        );
+      }
+
       const product = await getAdminProduct(accessToken, selectedProductId);
       setSelectedProduct(product);
       setVariantImageSelections(buildVariantImageSelections(product));
@@ -294,6 +319,33 @@ export default function AllProductsPage() {
         caughtError instanceof Error
           ? caughtError.message
           : "Unable to assign variant images",
+      );
+    } finally {
+      setIsImageSubmitting(false);
+    }
+  }
+
+  async function handleUploadVariantImages(variantId: string, files: File[]) {
+    if (!accessToken || !selectedProductId || !files.length) {
+      return;
+    }
+
+    setImageActionError(null);
+    setIsImageSubmitting(true);
+
+    try {
+      await uploadAdminVariantImages(
+        accessToken,
+        selectedProductId,
+        variantId,
+        files,
+      );
+      await refreshSelectedProduct();
+    } catch (caughtError) {
+      setImageActionError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to upload variant images",
       );
     } finally {
       setIsImageSubmitting(false);
@@ -568,6 +620,21 @@ export default function AllProductsPage() {
                         <span>{formatMoney(variant.price)}</span>
                         <small>Stock {variant.stockQuantity}</small>
                       </div>
+                      <label>
+                        Upload variant images
+                        <input
+                          accept="image/*"
+                          multiple
+                          type="file"
+                          onChange={(event) => {
+                            void handleUploadVariantImages(
+                              variant.id,
+                              Array.from(event.target.files ?? []),
+                            );
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
                       {selectedProduct.images?.length ? (
                         <div className="variant-image-picker">
                           {selectedProduct.images.map((image) => (

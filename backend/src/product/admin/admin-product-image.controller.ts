@@ -65,6 +65,25 @@ export class AdminProductImageController {
 export class AdminVariantImageController {
   constructor(private readonly productImageService: ProductImageService) {}
 
+  @Post()
+  @UseInterceptors(
+    FilesInterceptor('images', 12, {
+      storage: memoryStorage(),
+    }),
+  )
+  @ResponseMessage('Variant images uploaded successfully')
+  uploadVariantImages(
+    @Param('productId') productId: string,
+    @Param('variantId') variantId: string,
+    @UploadedFiles() files: Express.Multer.File[] = [],
+  ) {
+    return this.productImageService.uploadVariantImages(
+      productId,
+      variantId,
+      files,
+    );
+  }
+
   @Patch()
   @ResponseMessage('Variant images assigned successfully')
   assignVariantImages(

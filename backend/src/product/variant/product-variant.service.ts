@@ -151,19 +151,6 @@ export class ProductVariantService {
           createdAt: 'asc' as const,
         },
       },
-      images: {
-        where: {
-          deletedAt: null,
-        },
-        orderBy: [
-          {
-            sortOrder: 'asc' as const,
-          },
-          {
-            createdAt: 'asc' as const,
-          },
-        ],
-      },
     };
   }
 

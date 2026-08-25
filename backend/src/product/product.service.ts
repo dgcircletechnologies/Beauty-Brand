@@ -30,6 +30,24 @@ type ProductRelationClient = Pick<
   | 'benefit'
 >;
 
+type ProductImageRecord = {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  url: string;
+  publicId: string | null;
+  altText: string | null;
+  sortOrder: number;
+  isPrimary: boolean;
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  bytes: number | null;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 @Injectable()
 export class ProductService {
   constructor(
@@ -37,8 +55,8 @@ export class ProductService {
     private readonly productMetadataService: ProductMetadataService,
   ) {}
 
-  create(dto: CreateProductDto) {
-    return this.prisma
+  async create(dto: CreateProductDto) {
+    const productId = await this.prisma
       .$transaction(async (tx) => {
         const product = await tx.product.create({
           data: {
@@ -57,46 +75,25 @@ export class ProductService {
 
         await this.replaceProductRelations(tx, product.id, dto);
 
-        return tx.product.findUniqueOrThrow({
-          where: {
-            id: product.id,
-          },
-          include: this.getProductInclude(false),
-        });
+        return product.id;
       })
       .catch((error: unknown) => {
         this.handleUniqueSlugError(error);
         throw error;
       });
+
+    return this.findAdminProductById(productId);
   }
 
   findProductMetadata() {
     return this.productMetadataService.findAllMetadataOptions();
   }
 
-  findPublicProducts() {
-    return this.prisma.product.findMany({
+  async findPublicProducts() {
+    const products = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
         status: ProductStatus.PUBLISHED,
-      },
-      include: {
-        images: {
-          where: {
-            deletedAt: null,
-          },
-          orderBy: [
-            {
-              isPrimary: 'desc',
-            },
-            {
-              sortOrder: 'asc',
-            },
-            {
-              createdAt: 'asc',
-            },
-          ],
-        },
       },
       orderBy: [
         {
@@ -110,6 +107,15 @@ export class ProductService {
         },
       ],
     });
+
+    const imagesByProductId = await this.getImagesByProductId(
+      products.map((product) => product.id),
+    );
+
+    return products.map((product) => ({
+      ...product,
+      images: imagesByProductId.get(product.id) ?? [],
+    }));
   }
 
   async findPublicProductBySlug(slug: string) {
@@ -120,7 +126,7 @@ export class ProductService {
         status: ProductStatus.PUBLISHED,
       },
       include: {
-        ...this.getProductInclude(true),
+        ...this.getPublicProductInclude(),
       },
     });
 
@@ -128,7 +134,19 @@ export class ProductService {
       throw new NotFoundException('Product not found');
     }
 
-    return product;
+    const imagesByProductId = await this.getImagesByProductId([product.id]);
+    const variantImagesByVariantId = await this.getImagesByVariantId(
+      product.variants.map((variant) => variant.id),
+    );
+
+    return {
+      ...product,
+      images: imagesByProductId.get(product.id) ?? [],
+      variants: product.variants.map((variant) => ({
+        ...variant,
+        images: variantImagesByVariantId.get(variant.id) ?? [],
+      })),
+    };
   }
 
   findAdminProducts() {
@@ -192,7 +210,7 @@ export class ProductService {
       }),
     };
 
-    return this.prisma
+    const productId = await this.prisma
       .$transaction(async (tx) => {
         await tx.product.update({
           where: {
@@ -203,17 +221,14 @@ export class ProductService {
 
         await this.replaceProductRelations(tx, id, dto);
 
-        return tx.product.findUniqueOrThrow({
-          where: {
-            id,
-          },
-          include: this.getProductInclude(false),
-        });
+        return id;
       })
       .catch((error: unknown) => {
         this.handleUniqueSlugError(error);
         throw error;
       });
+
+    return this.findAdminProductById(productId);
   }
 
   async updateStatus(id: string, dto: UpdateProductStatusDto) {
@@ -259,7 +274,19 @@ export class ProductService {
       throw new NotFoundException('Product not found');
     }
 
-    return product;
+    const imagesByProductId = await this.getImagesByProductId([product.id]);
+    const variantImagesByVariantId = await this.getImagesByVariantId(
+      product.variants.map((variant) => variant.id),
+    );
+
+    return {
+      ...product,
+      images: imagesByProductId.get(product.id) ?? [],
+      variants: product.variants.map((variant) => ({
+        ...variant,
+        images: variantImagesByVariantId.get(variant.id) ?? [],
+      })),
+    };
   }
 
   private normalizeSlug(slug: string): string {
@@ -303,40 +330,9 @@ export class ProductService {
             isActive: true,
           }),
         },
-        include: {
-          images: {
-            where: {
-              deletedAt: null,
-            },
-            orderBy: [
-              {
-                sortOrder: 'asc' as const,
-              },
-              {
-                createdAt: 'asc' as const,
-              },
-            ],
-          },
-        },
         orderBy: {
           createdAt: 'desc' as const,
         },
-      },
-      images: {
-        where: {
-          deletedAt: null,
-        },
-        orderBy: [
-          {
-            isPrimary: 'desc' as const,
-          },
-          {
-            sortOrder: 'asc' as const,
-          },
-          {
-            createdAt: 'asc' as const,
-          },
-        ],
       },
       ingredients: {
         include: {
@@ -377,6 +373,180 @@ export class ProductService {
         },
       },
     };
+  }
+
+  private getPublicProductInclude() {
+    return {
+      categories: {
+        include: {
+          category: true,
+        },
+        orderBy: [
+          {
+            isPrimary: 'desc' as const,
+          },
+          {
+            sortOrder: 'asc' as const,
+          },
+        ],
+      },
+      attributeValues: {
+        include: {
+          attribute: true,
+          option: true,
+        },
+        orderBy: {
+          createdAt: 'asc' as const,
+        },
+      },
+      variants: {
+        where: {
+          deletedAt: null,
+          isActive: true,
+        },
+        orderBy: {
+          createdAt: 'desc' as const,
+        },
+      },
+      ingredients: {
+        include: {
+          ingredient: true,
+        },
+        orderBy: {
+          sortOrder: 'asc' as const,
+        },
+      },
+      audiences: {
+        include: {
+          audience: true,
+        },
+      },
+      skinTypes: {
+        include: {
+          skinType: true,
+        },
+      },
+      ageGroups: {
+        include: {
+          ageGroup: true,
+        },
+      },
+      hairProfiles: {
+        include: {
+          hairProfile: true,
+        },
+      },
+      concerns: {
+        include: {
+          concern: true,
+        },
+      },
+      productBenefits: {
+        include: {
+          benefit: true,
+        },
+      },
+    };
+  }
+
+  private async getImagesByProductId(productIds: string[]) {
+    const imagesByProductId = new Map<string, ProductImageRecord[]>();
+
+    if (!productIds.length) {
+      return imagesByProductId;
+    }
+
+    const images = await this.findProductImagesByColumn(
+      'productId',
+      productIds,
+      true,
+    );
+
+    images.forEach((image) => {
+      const productImages = imagesByProductId.get(image.productId) ?? [];
+      productImages.push(image);
+      imagesByProductId.set(image.productId, productImages);
+    });
+
+    return imagesByProductId;
+  }
+
+  private async getImagesByVariantId(variantIds: string[]) {
+    const imagesByVariantId = new Map<string, ProductImageRecord[]>();
+
+    if (!variantIds.length) {
+      return imagesByVariantId;
+    }
+
+    const images = await this.findProductImagesByColumn(
+      'variantId',
+      variantIds,
+      false,
+    );
+
+    images.forEach((image) => {
+      if (!image.variantId) {
+        return;
+      }
+
+      const variantImages = imagesByVariantId.get(image.variantId) ?? [];
+      variantImages.push(image);
+      imagesByVariantId.set(image.variantId, variantImages);
+    });
+
+    return imagesByVariantId;
+  }
+
+  private getProductImageOrderBy() {
+    return [
+      {
+        isPrimary: 'desc' as const,
+      },
+      {
+        sortOrder: 'asc' as const,
+      },
+      {
+        createdAt: 'asc' as const,
+      },
+    ];
+  }
+
+  private async findProductImagesByColumn(
+    column: 'productId' | 'variantId',
+    ids: string[],
+    includePrimarySort: boolean,
+  ) {
+    const safeIds = ids.filter((id) => /^[a-zA-Z0-9_-]+$/.test(id));
+
+    if (!safeIds.length) {
+      return [];
+    }
+
+    const idList = safeIds.map((id) => `'${id}'`).join(',');
+    const primarySort = includePrimarySort ? '"isPrimary" DESC,' : '';
+
+    return this.prisma.$queryRawUnsafe<ProductImageRecord[]>(`
+      SELECT
+        "id",
+        "productId",
+        "variantId",
+        "url",
+        "publicId",
+        "altText",
+        "sortOrder",
+        "isPrimary",
+        "width",
+        "height",
+        "format",
+        "bytes",
+        "deletedAt",
+        "createdAt",
+        "updatedAt"
+      FROM "public"."ProductImage"
+      WHERE "deletedAt" IS NULL
+        AND "${column}" IN (${idList})
+      ORDER BY ${primarySort} "sortOrder" ASC, "createdAt" ASC
+    `);
   }
 
   private async replaceProductRelations(

@@ -26,6 +26,7 @@ import {
   getAdminProductMetadataOptions,
   setAdminProductAttributeValue,
   uploadAdminProductImages,
+  uploadAdminVariantImages,
 } from "@/lib/api/admin";
 
 type AttributeFormValue = {
@@ -438,7 +439,11 @@ export default function AddProductPage() {
       );
 
       for (const variantDraft of variantDrafts) {
-        const { imageFileKeys = [], ...variantPayload } = variantDraft;
+        const {
+          imageFileKeys = [],
+          imageFiles = [],
+          ...variantPayload
+        } = variantDraft;
         const variant = await createAdminProductVariant(
           accessToken,
           product.id,
@@ -454,6 +459,15 @@ export default function AddProductPage() {
             product.id,
             variant.id,
             imageIds,
+          );
+        }
+
+        if (imageFiles.length) {
+          await uploadAdminVariantImages(
+            accessToken,
+            product.id,
+            variant.id,
+            imageFiles,
           );
         }
       }

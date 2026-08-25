@@ -10,6 +10,24 @@ import { AssignVariantImagesDto } from './dto/assign-variant-images.dto';
 import { UpdateProductImageDto } from './dto/update-product-image.dto';
 import { CloudinaryProductImageService } from './cloudinary-product-image.service';
 
+type ProductImageRecord = {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  url: string;
+  publicId: string | null;
+  altText: string | null;
+  sortOrder: number;
+  isPrimary: boolean;
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  bytes: number | null;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 @Injectable()
 export class ProductImageService {
   constructor(
@@ -21,28 +39,28 @@ export class ProductImageService {
   async findByProduct(productId: string) {
     await this.ensureProduct(productId);
 
-    return this.prisma.productImage.findMany({
-      where: {
-        productId,
-        deletedAt: null,
-      },
-      orderBy: [
-        {
-          isPrimary: 'desc',
-        },
-        {
-          sortOrder: 'asc',
-        },
-        {
-          createdAt: 'asc',
-        },
-      ],
-    });
+    return this.findProductImagesByProductId(productId);
   }
 
   async uploadProductImages(productId: string, files: Express.Multer.File[]) {
     await this.ensureProduct(productId);
+    return this.uploadImages(productId, files);
+  }
 
+  async uploadVariantImages(
+    productId: string,
+    variantId: string,
+    files: Express.Multer.File[],
+  ) {
+    await this.ensureVariant(productId, variantId);
+    return this.uploadImages(productId, files, variantId);
+  }
+
+  private async uploadImages(
+    productId: string,
+    files: Express.Multer.File[],
+    variantId?: string,
+  ) {
     if (!files.length) {
       throw new BadRequestException('Select at least one image');
     }
@@ -72,6 +90,7 @@ export class ProductImageService {
     await this.prisma.productImage.createMany({
       data: uploadedImages.map((image, index) => ({
         productId,
+        variantId: variantId ?? null,
         url: image.secure_url,
         publicId: image.public_id,
         altText: null,
@@ -257,5 +276,34 @@ export class ProductImageService {
   private nullableTrim(value?: string | null): string | null {
     const trimmed = value?.trim();
     return trimmed || null;
+  }
+
+  private findProductImagesByProductId(productId: string) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(productId)) {
+      throw new BadRequestException('Invalid product id');
+    }
+
+    return this.prisma.$queryRawUnsafe<ProductImageRecord[]>(`
+      SELECT
+        "id",
+        "productId",
+        "variantId",
+        "url",
+        "publicId",
+        "altText",
+        "sortOrder",
+        "isPrimary",
+        "width",
+        "height",
+        "format",
+        "bytes",
+        "deletedAt",
+        "createdAt",
+        "updatedAt"
+      FROM "public"."ProductImage"
+      WHERE "deletedAt" IS NULL
+        AND "productId" = '${productId}'
+      ORDER BY "isPrimary" DESC, "sortOrder" ASC, "createdAt" ASC
+    `);
   }
 }

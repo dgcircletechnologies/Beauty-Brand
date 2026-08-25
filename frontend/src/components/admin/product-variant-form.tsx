@@ -6,6 +6,7 @@ import type { CreateAdminProductVariantPayload } from "@/lib/api/admin";
 
 export type ProductVariantFormPayload = CreateAdminProductVariantPayload & {
   imageFileKeys?: string[];
+  imageFiles?: File[];
 };
 
 type ProductVariantFormProps = {
@@ -35,6 +36,7 @@ export function ProductVariantForm({
   const [stockQuantity, setStockQuantity] = useState("0");
   const [isActive, setIsActive] = useState(true);
   const [selectedImageKeys, setSelectedImageKeys] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   async function submitVariant() {
@@ -57,6 +59,7 @@ export function ProductVariantForm({
       stockQuantity: stockQuantity ? Number(stockQuantity) : 0,
       isActive,
       imageFileKeys: selectedImageKeys,
+      imageFiles,
     });
 
     setSku("");
@@ -65,6 +68,7 @@ export function ProductVariantForm({
     setStockQuantity("0");
     setIsActive(true);
     setSelectedImageKeys([]);
+    setImageFiles([]);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -146,6 +150,23 @@ export function ProductVariantForm({
             </label>
           ))}
         </div>
+      ) : null}
+
+      <label>
+        Variant images
+        <input
+          accept="image/*"
+          multiple
+          type="file"
+          onChange={(event) => {
+            setImageFiles(Array.from(event.target.files ?? []));
+            event.target.value = "";
+          }}
+        />
+      </label>
+
+      {imageFiles.length ? (
+        <p className="muted-text">{imageFiles.length} image(s) selected</p>
       ) : null}
 
       {error ? <p className="form-error">{error}</p> : null}

@@ -6,6 +6,71 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import * as customerApi from "@/lib/api/customer";
 
+function ProductImageSlider({
+  images,
+  productName,
+}: {
+  images: customerApi.CustomerProductImage[];
+  productName: string;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeImage = images[activeIndex];
+
+  if (!activeImage) {
+    return null;
+  }
+
+  function showPrevious() {
+    setActiveIndex((current) =>
+      current === 0 ? images.length - 1 : current - 1,
+    );
+  }
+
+  function showNext() {
+    setActiveIndex((current) =>
+      current === images.length - 1 ? 0 : current + 1,
+    );
+  }
+
+  return (
+    <div className="product-card-slider">
+      <img
+        alt={activeImage.altText ?? productName}
+        className="product-card-image"
+        src={activeImage.url}
+      />
+      {images.length > 1 ? (
+        <>
+          <button
+            aria-label="Previous product image"
+            className="slider-button slider-button-left"
+            type="button"
+            onClick={showPrevious}
+          >
+            &lsaquo;
+          </button>
+          <button
+            aria-label="Next product image"
+            className="slider-button slider-button-right"
+            type="button"
+            onClick={showNext}
+          >
+            &rsaquo;
+          </button>
+          <div className="slider-dots" aria-hidden="true">
+            {images.map((image, index) => (
+              <span
+                className={index === activeIndex ? "active" : undefined}
+                key={image.id}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function ProductDashboard() {
   const { isAuthenticated, user } = useAuth();
   const [products, setProducts] = useState<customerApi.CustomerProduct[]>([]);
@@ -91,16 +156,11 @@ export function ProductDashboard() {
       ) : products.length ? (
         <section className="product-grid">
           {products.map((product) => (
-            <Link
-              className="product-card product-card-link"
-              href={`/products/${product.slug}`}
-              key={product.id}
-            >
-              {product.images?.[0] ? (
-                <img
-                  alt={product.images[0].altText ?? product.name}
-                  className="product-card-image"
-                  src={product.images[0].url}
+            <article className="product-card" key={product.id}>
+              {product.images?.length ? (
+                <ProductImageSlider
+                  images={product.images}
+                  productName={product.name}
                 />
               ) : null}
               <div>
@@ -110,8 +170,13 @@ export function ProductDashboard() {
                 <h2>{product.name}</h2>
                 <p>{product.shortDescription || "Skincare product"}</p>
               </div>
-              <span className="primary-link-button">View Variants</span>
-            </Link>
+              <Link
+                className="primary-link-button"
+                href={`/products/${product.slug}`}
+              >
+                View Variants
+              </Link>
+            </article>
           ))}
         </section>
       ) : (
