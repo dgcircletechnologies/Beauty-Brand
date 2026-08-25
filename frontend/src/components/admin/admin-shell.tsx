@@ -167,6 +167,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const isShippingActive = pathname.startsWith("/admin/shipping");
   const isMetadataActive = pathname.startsWith("/admin/product-metadata");
   const isOrdersActive = pathname.startsWith("/admin/orders");
+  const isPaymentsActive = pathname.startsWith("/admin/payments");
 
   return (
     <div
@@ -280,6 +281,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </div>
             ) : null}
           </div>
+
+          <Link
+            aria-current={isPaymentsActive ? "page" : undefined}
+            className={isPaymentsActive ? "active nav-link" : "nav-link"}
+            href="/admin/payments"
+          >
+            <OrdersIcon />
+            <span>Payments</span>
+          </Link>
 
           <div className={`nav-group ${isShippingActive ? "active" : ""}`}>
             <div className="nav-group-row">

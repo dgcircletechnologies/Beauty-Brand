@@ -29,6 +29,9 @@ services:
       HOST: 0.0.0.0
       DATABASE_URL: postgresql://skincare:skincare@postgres:5432/skincare_db
       CORS_ORIGIN: http://localhost:5000,http://127.0.0.1:5000,http://localhost:3001,http://127.0.0.1:3001
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
     ports:
       - "3000:3000"
     command: sh -c "npm ci && npx prisma migrate deploy && npm run start:dev"

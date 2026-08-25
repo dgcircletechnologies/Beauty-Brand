@@ -219,6 +219,17 @@ export type CheckoutPreview = {
   selectedCartItemIds: string[];
 };
 
+export type RazorpayOrder = {
+  keyId: string;
+  localOrderId: string;
+  orderNumber: string;
+  razorpayOrderId: string;
+  amount: number;
+  currency: string;
+  customerEmail: string;
+  customerPhone: string | null;
+};
+
 export type CustomerOrder = {
   id: string;
   orderNumber: string;
@@ -454,6 +465,40 @@ export function createOrder(
   },
 ) {
   return apiRequest<CustomerOrder>("/orders/checkout", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createRazorpayOrder(
+  accessToken: string,
+  payload: {
+    cartItemIds?: string[];
+    shippingAddressId: string;
+    billingAddressId?: string;
+    shippingRateId: string;
+    currencyCode?: string;
+    customerPhone?: string;
+  },
+) {
+  return apiRequest<RazorpayOrder>("/payments/razorpay/create-order", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function verifyRazorpayPayment(
+  accessToken: string,
+  payload: {
+    localOrderId: string;
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  },
+) {
+  return apiRequest<CustomerOrder>("/payments/razorpay/verify", {
     method: "POST",
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),

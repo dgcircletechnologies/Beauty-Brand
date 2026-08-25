@@ -10,6 +10,7 @@ import {
   CartStatus,
   OrderAddressType,
   OrderStatus,
+  PaymentStatus,
   ProductStatus,
   ShipmentStatus,
 } from '../../generated/prisma/enums.cjs';
@@ -117,6 +118,19 @@ export class OrderService {
   }
 
   async createOrder(userId: string, dto: CreateOrderDto) {
+    const order = await this.createPendingPaymentOrder(userId, dto);
+    return this.confirmPaidOrder(order.id, userId, {
+      provider: 'manual',
+      providerPaymentId: null,
+      providerOrderId: null,
+      signature: null,
+      rawResponse: {
+        source: 'legacy_checkout',
+      },
+    });
+  }
+
+  async createPendingPaymentOrder(userId: string, dto: CreateOrderDto) {
     const cart = await this.getActiveCart(userId);
     const items = this.pickCartItems(cart.items, dto.cartItemIds);
 
@@ -141,30 +155,25 @@ export class OrderService {
       totals.baseSubtotal + baseShippingAmount,
       totals.baseCurrency.decimalDigits,
     );
+    const displayShippingAmount = this.roundMoney(
+      baseShippingAmount * totals.rate,
+      totals.displayCurrency.decimalDigits,
+    );
+    const displayTotalAmount = this.roundMoney(
+      totals.displaySubtotal + displayShippingAmount,
+      totals.displayCurrency.decimalDigits,
+    );
 
     const orderNumber = this.generateOrderNumber();
     const now = new Date();
 
     return this.prisma.$transaction(async (tx) => {
-      for (const item of items) {
-        await tx.productVariant.update({
-          where: {
-            id: item.variantId,
-          },
-          data: {
-            stockQuantity: {
-              decrement: item.quantity,
-            },
-          },
-        });
-      }
-
       const order = await tx.order.create({
         data: {
           userId,
           orderNumber,
           idempotencyKey: `${orderNumber}-${userId}`,
-          status: OrderStatus.PROCESSING,
+          status: OrderStatus.PENDING_PAYMENT,
           baseCurrencyCode: totals.baseCurrency.code,
           displayCurrencyCode: totals.displayCurrency.code,
           exchangeRate: totals.rate,
@@ -216,9 +225,9 @@ export class OrderService {
           statusHistory: {
             create: {
               fromStatus: null,
-              toStatus: OrderStatus.PROCESSING,
+              toStatus: OrderStatus.PENDING_PAYMENT,
               changedByUserId: userId,
-              reason: 'Order placed from checkout',
+              reason: 'Order created pending payment',
             },
           },
           shipments: {
@@ -226,37 +235,170 @@ export class OrderService {
               status: ShipmentStatus.PENDING,
             },
           },
+          payments: {
+            create: {
+              provider: 'razorpay',
+              idempotencyKey: `${orderNumber}-razorpay`,
+              status: PaymentStatus.PENDING,
+              amount: baseTotalAmount,
+              currencyCode: totals.baseCurrency.code,
+              metadata: {
+                cartId: cart.id,
+                selectedCartItemIds: items.map((item) => item.id),
+                displayAmount: displayTotalAmount,
+                displayCurrencyCode: totals.displayCurrency.code,
+              },
+            },
+          },
         },
         include: this.orderInclude(),
       });
 
-      await tx.cartItem.deleteMany({
+      return this.toOrderView(order);
+    });
+  }
+
+  async confirmPaidOrder(
+    orderId: string,
+    userId: string | null,
+    payment: {
+      provider: string;
+      providerPaymentId: string | null;
+      providerOrderId: string | null;
+      signature: string | null;
+      rawResponse: Record<string, unknown> | null;
+    },
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
         where: {
-          id: {
-            in: items.map((item) => item.id),
-          },
-          cartId: cart.id,
+          id: orderId,
+          ...(userId && {
+            userId,
+          }),
+        },
+        include: {
+          items: true,
+          payments: true,
+          displayCurrency: true,
         },
       });
 
-      const remainingItems = await tx.cartItem.count({
-        where: {
-          cartId: cart.id,
-        },
-      });
-
-      if (remainingItems === 0) {
-        await tx.cart.update({
-          where: {
-            id: cart.id,
-          },
-          data: {
-            status: CartStatus.CONVERTED,
-          },
-        });
+      if (!order) {
+        throw new NotFoundException('Order not found');
       }
 
-      return this.toOrderView(order);
+      const existingPayment =
+        order.payments.find(
+          (transaction) => transaction.providerIntentId === payment.providerOrderId,
+        ) ?? order.payments[0];
+
+      if (!existingPayment) {
+        throw new NotFoundException('Payment transaction not found');
+      }
+
+      if (existingPayment.status !== PaymentStatus.SUCCEEDED) {
+        for (const item of order.items) {
+          await tx.productVariant.update({
+            where: {
+              id: item.variantId,
+            },
+            data: {
+              stockQuantity: {
+                decrement: item.quantity,
+              },
+            },
+          });
+        }
+      }
+
+      await tx.paymentTransaction.update({
+        where: {
+          id: existingPayment.id,
+        },
+        data: {
+          providerTransactionId: payment.providerPaymentId,
+          providerIntentId:
+            payment.providerOrderId ?? existingPayment.providerIntentId,
+          status: PaymentStatus.SUCCEEDED,
+          processedAt: new Date(),
+          metadata: JSON.parse(
+            JSON.stringify({
+              ...(typeof existingPayment.metadata === 'object' &&
+                existingPayment.metadata !== null &&
+                !Array.isArray(existingPayment.metadata) &&
+                existingPayment.metadata),
+              razorpaySignature: payment.signature,
+              rawResponse: payment.rawResponse,
+            }),
+          ),
+        },
+      });
+
+      const metadata =
+        typeof existingPayment.metadata === 'object' &&
+        existingPayment.metadata !== null &&
+        !Array.isArray(existingPayment.metadata)
+          ? (existingPayment.metadata as {
+              cartId?: string;
+              selectedCartItemIds?: string[];
+            })
+          : {};
+
+      if (metadata.cartId && metadata.selectedCartItemIds?.length) {
+        await tx.cartItem.deleteMany({
+          where: {
+            cartId: metadata.cartId,
+            id: {
+              in: metadata.selectedCartItemIds,
+            },
+          },
+        });
+
+        const remainingItems = await tx.cartItem.count({
+          where: {
+            cartId: metadata.cartId,
+          },
+        });
+
+        if (remainingItems === 0) {
+          await tx.cart.update({
+            where: {
+              id: metadata.cartId,
+            },
+            data: {
+              status: CartStatus.CONVERTED,
+            },
+          });
+        }
+      }
+
+      await tx.order.update({
+        where: {
+          id: order.id,
+        },
+        data: {
+          paidAt: new Date(),
+        },
+      });
+
+      await this.changeOrderStatus(
+        tx,
+        order.id,
+        order.status,
+        OrderStatus.PROCESSING,
+        order.userId,
+        'Payment confirmed',
+      );
+
+      const updatedOrder = await tx.order.findUnique({
+        where: {
+          id: order.id,
+        },
+        include: this.orderInclude(),
+      });
+
+      return updatedOrder ? this.toOrderView(updatedOrder) : null;
     });
   }
 
@@ -937,6 +1079,11 @@ export class OrderService {
           email: true,
           firstName: true,
           lastName: true,
+        },
+      },
+      payments: {
+        orderBy: {
+          createdAt: 'desc' as const,
         },
       },
       displayCurrency: true,

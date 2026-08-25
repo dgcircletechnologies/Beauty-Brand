@@ -9,6 +9,48 @@ import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
 
+type RazorpayCheckoutResponse = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayCheckoutOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  prefill: {
+    email: string;
+    contact?: string;
+  };
+  notes: {
+    localOrderId: string;
+    orderNumber: string;
+  };
+  theme: {
+    color: string;
+  };
+  handler: (response: RazorpayCheckoutResponse) => void;
+  modal: {
+    ondismiss: () => void;
+  };
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => {
+      open: () => void;
+      on: (
+        event: "payment.failed",
+        handler: (response: { error?: { description?: string } }) => void,
+      ) => void;
+    };
+  }
+}
+
 function formatMoney(
   amount: number | string,
   currency?: { code: string; symbol: string | null; decimalDigits: number },
@@ -22,6 +64,35 @@ function formatMoney(
   return `${currency?.symbol ?? currency?.code ?? ""}${value.toFixed(
     currency?.decimalDigits ?? 2,
   )}`;
+}
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://checkout.razorpay.com/v1/checkout.js"]',
+    );
+
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("Unable to load Razorpay checkout")),
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load Razorpay checkout"));
+    document.body.appendChild(script);
+  });
 }
 
 export default function CheckoutPage() {
@@ -185,7 +256,13 @@ export default function CheckoutPage() {
     setError(null);
 
     try {
-      const order = await customerApi.createOrder(accessToken, {
+      await loadRazorpayCheckout();
+
+      if (!window.Razorpay) {
+        throw new Error("Unable to load Razorpay checkout");
+      }
+
+      const razorpayOrder = await customerApi.createRazorpayOrder(accessToken, {
         cartItemIds: preview?.selectedCartItemIds,
         shippingAddressId,
         billingAddressId: useSameAddress ? shippingAddressId : billingAddressId,
@@ -194,14 +271,74 @@ export default function CheckoutPage() {
         customerPhone,
       });
 
+      const checkout = new window.Razorpay({
+        key: razorpayOrder.keyId,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        name: "BlueWave Skincare",
+        description: `Order ${razorpayOrder.orderNumber}`,
+        order_id: razorpayOrder.razorpayOrderId,
+        prefill: {
+          email: razorpayOrder.customerEmail,
+          contact: razorpayOrder.customerPhone ?? customerPhone,
+        },
+        notes: {
+          localOrderId: razorpayOrder.localOrderId,
+          orderNumber: razorpayOrder.orderNumber,
+        },
+        theme: {
+          color: "#1868db",
+        },
+        handler: (response) => {
+          void verifyPayment(razorpayOrder.localOrderId, response);
+        },
+        modal: {
+          ondismiss: () => {
+            setIsSubmitting(false);
+          },
+        },
+      });
+
+      checkout.on("payment.failed", (response) => {
+        setError(response.error?.description ?? "Razorpay payment failed");
+        setIsSubmitting(false);
+      });
+      checkout.open();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to start Razorpay payment",
+      );
+      setIsSubmitting(false);
+    }
+  }
+
+  async function verifyPayment(
+    localOrderId: string,
+    response: RazorpayCheckoutResponse,
+  ) {
+    if (!accessToken) {
+      setError("Login again to verify payment.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const order = await customerApi.verifyRazorpayPayment(accessToken, {
+        localOrderId,
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
+      });
+
       router.push(`/orders?placed=${order.orderNumber}`);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to place order",
+          : "Unable to verify Razorpay payment",
       );
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -213,7 +350,7 @@ export default function CheckoutPage() {
           <div>
             <p className="eyebrow">Checkout</p>
             <h1>Confirm your order</h1>
-            <p>Select an address now. Payment details can be added later.</p>
+            <p>Select an address and pay securely with Razorpay.</p>
           </div>
         </section>
 
@@ -402,7 +539,7 @@ export default function CheckoutPage() {
                 }
                 type="submit"
               >
-                {isSubmitting ? "Placing order..." : "Confirm Order"}
+                {isSubmitting ? "Opening Razorpay..." : "Pay with Razorpay"}
               </button>
             </aside>
           </form>

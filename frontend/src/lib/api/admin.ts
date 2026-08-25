@@ -390,6 +390,47 @@ export type AdminOrder = {
   }[];
 };
 
+export type AdminPayment = {
+  id: string;
+  orderId: string;
+  type: "PAYMENT" | "REFUND";
+  provider: string;
+  providerTransactionId: string | null;
+  providerIntentId: string | null;
+  idempotencyKey: string;
+  status:
+    | "PENDING"
+    | "PROCESSING"
+    | "SUCCEEDED"
+    | "FAILED"
+    | "CANCELLED"
+    | "PARTIALLY_REFUNDED"
+    | "REFUNDED";
+  amount: number;
+  currencyCode: string;
+  failureCode: string | null;
+  failureReason: string | null;
+  metadata: unknown;
+  processedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  currency: AdminCurrency;
+  order: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    customerEmail: string;
+    customerPhone: string | null;
+    totalAmount: number;
+    user: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string | null;
+    };
+  } | null;
+};
+
 export type CreateAdminExchangeRatePayload = {
   baseCurrencyCode: string;
   quoteCurrencyCode: string;
@@ -869,6 +910,18 @@ export function updateAdminShippingRate(
 
 export function getAdminOrders(accessToken: string) {
   return apiRequest<AdminOrder[]>("/admin/orders", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function getAdminPayments(accessToken: string) {
+  return apiRequest<AdminPayment[]>("/admin/payments", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function getAdminPayment(accessToken: string, paymentId: string) {
+  return apiRequest<AdminPayment>(`/admin/payments/${paymentId}`, {
     headers: withAuth(accessToken),
   });
 }
