@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import type { ReactNode } from "react";
 
 import type { CreateAdminProductVariantPayload } from "@/lib/api/admin";
 
@@ -17,6 +18,7 @@ type ProductVariantFormProps = {
     previewUrl: string;
   }[];
   isSubmitting?: boolean;
+  children?: ReactNode;
   onCancel?: () => void;
   onSubmit: (payload: ProductVariantFormPayload) => Promise<void> | void;
   submitLabel?: string;
@@ -26,6 +28,7 @@ export function ProductVariantForm({
   asForm = true,
   imageOptions = [],
   isSubmitting = false,
+  children,
   onCancel,
   onSubmit,
   submitLabel = "Add Variant",
@@ -168,6 +171,8 @@ export function ProductVariantForm({
       {imageFiles.length ? (
         <p className="muted-text">{imageFiles.length} image(s) selected</p>
       ) : null}
+
+      {children}
 
       {error ? <p className="form-error">{error}</p> : null}
 

@@ -25,6 +25,7 @@ import {
   getAdminAttributes,
   getAdminProductMetadataOptions,
   setAdminProductAttributeValue,
+  setAdminVariantAttributeValue,
   uploadAdminProductImages,
   uploadAdminVariantImages,
 } from "@/lib/api/admin";
@@ -44,7 +45,11 @@ type ProductImageDraft = {
   previewUrl: string;
 };
 
-type VariantDraft = ProductVariantFormPayload;
+type VariantDraft = ProductVariantFormPayload & {
+  attributePayloads?: SetProductAttributeValuePayload[];
+};
+
+type VariantFormValue = AttributeFormValue;
 
 const defaultMetadata: AdminProductMetadataOptions = {
   ingredients: [],
@@ -90,6 +95,9 @@ export default function AddProductPage() {
   const [selectedBenefitIds, setSelectedBenefitIds] = useState<string[]>([]);
   const [attributeValues, setAttributeValues] = useState<
     Record<string, AttributeFormValue>
+  >({});
+  const [variantAttributeValues, setVariantAttributeValues] = useState<
+    Record<string, VariantFormValue>
   >({});
   const [variantDrafts, setVariantDrafts] = useState<VariantDraft[]>([]);
   const [imageDrafts, setImageDrafts] = useState<ProductImageDraft[]>([]);
@@ -258,6 +266,34 @@ export default function AddProductPage() {
     }));
   }
 
+  function removeVariantAttribute(attributeId: string) {
+    setVariantAttributeValues((current) => ({
+      ...current,
+      [attributeId]: {
+        ...getAttributeValue(current, attributeId),
+        selected: false,
+        textValue: "",
+        numberValue: "",
+        booleanValue: true,
+        optionId: "",
+        optionIds: [],
+      },
+    }));
+  }
+
+  function updateVariantAttributeValue(
+    attributeId: string,
+    update: Partial<VariantFormValue>,
+  ) {
+    setVariantAttributeValues((current) => ({
+      ...current,
+      [attributeId]: {
+        ...getAttributeValue(current, attributeId),
+        ...update,
+      },
+    }));
+  }
+
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.target.files ?? []);
 
@@ -292,7 +328,16 @@ export default function AddProductPage() {
   }
 
   function addVariantDraft(payload: ProductVariantFormPayload) {
-    setVariantDrafts((current) => [...current, payload]);
+    const attributePayloads = buildVariantAttributePayloads();
+
+    setVariantDrafts((current) => [
+      ...current,
+      {
+        ...payload,
+        attributePayloads,
+      },
+    ]);
+    setVariantAttributeValues({});
   }
 
   function removeVariantDraft(indexToRemove: number) {
@@ -312,42 +357,22 @@ export default function AddProductPage() {
   function buildAttributePayloads(): SetProductAttributeValuePayload[] {
     return attributes
       .filter((attribute) => attributeValues[attribute.id]?.selected)
-      .map((attribute) => {
-        const value = getAttributeValue(attributeValues, attribute.id);
+      .map((attribute) => buildAttributePayload(attribute, attributeValues));
+  }
 
-        switch (attribute.dataType) {
-          case "TEXT":
-            return {
-              attributeId: attribute.id,
-              textValue: value.textValue,
-            };
-          case "NUMBER":
-            return {
-              attributeId: attribute.id,
-              numberValue: Number(value.numberValue),
-            };
-          case "BOOLEAN":
-            return {
-              attributeId: attribute.id,
-              booleanValue: value.booleanValue,
-            };
-          case "SELECT":
-            return {
-              attributeId: attribute.id,
-              optionId: value.optionId,
-            };
-          case "MULTI_SELECT":
-            return {
-              attributeId: attribute.id,
-              optionIds: value.optionIds,
-            };
-        }
-      });
+  function buildVariantAttributePayloads(): SetProductAttributeValuePayload[] {
+    return attributes
+      .filter((attribute) => variantAttributeValues[attribute.id]?.selected)
+      .map((attribute) => buildAttributePayload(attribute, variantAttributeValues));
   }
 
   function validateAttributes() {
+    return validateAttributeValueSet(attributeValues);
+  }
+
+  function validateAttributeValueSet(values: Record<string, AttributeFormValue>) {
     for (const attribute of attributes) {
-      const value = attributeValues[attribute.id];
+      const value = values[attribute.id];
 
       if (!value?.selected) {
         continue;
@@ -376,6 +401,10 @@ export default function AddProductPage() {
     return null;
   }
 
+  function validateVariantAttributes() {
+    return validateAttributeValueSet(variantAttributeValues);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -387,6 +416,13 @@ export default function AddProductPage() {
 
     if (attributeError) {
       setError(attributeError);
+      return;
+    }
+
+    const variantAttributeError = validateVariantAttributes();
+
+    if (variantAttributeError) {
+      setError(`Variant ${variantAttributeError}`);
       return;
     }
 
@@ -440,6 +476,7 @@ export default function AddProductPage() {
 
       for (const variantDraft of variantDrafts) {
         const {
+          attributePayloads = [],
           imageFileKeys = [],
           imageFiles = [],
           ...variantPayload
@@ -470,6 +507,17 @@ export default function AddProductPage() {
             imageFiles,
           );
         }
+
+        await Promise.all(
+          attributePayloads.map((payload) =>
+            setAdminVariantAttributeValue(
+              accessToken,
+              product.id,
+              variant.id,
+              payload,
+            ),
+          ),
+        );
       }
 
       setSuccess("Product created successfully");
@@ -830,7 +878,20 @@ export default function AddProductPage() {
               }))}
               submitLabel="Add Variant"
               onSubmit={addVariantDraft}
-            />
+            >
+              <VariantAttributeEditor
+                attributes={attributes}
+                attributeOptions={attributeOptions}
+                values={variantAttributeValues}
+                onAdd={(attributeId) =>
+                  updateVariantAttributeValue(attributeId, {
+                    selected: true,
+                  })
+                }
+                onChange={updateVariantAttributeValue}
+                onRemove={removeVariantAttribute}
+              />
+            </ProductVariantForm>
 
             {variantDrafts.length > 0 ? (
               <div className="variant-list">
@@ -850,6 +911,11 @@ export default function AddProductPage() {
                     {variant.imageFileKeys?.length ? (
                       <small>
                         Images: {variant.imageFileKeys.length}
+                      </small>
+                    ) : null}
+                    {variant.attributePayloads?.length ? (
+                      <small>
+                        Variant attributes: {variant.attributePayloads.length}
                       </small>
                     ) : null}
                     <button
@@ -1012,6 +1078,58 @@ function AttributeValueControl({
           }
         />
       ) : null}
+    </div>
+  );
+}
+
+function VariantAttributeEditor({
+  attributes,
+  attributeOptions,
+  values,
+  onAdd,
+  onChange,
+  onRemove,
+}: {
+  attributes: AdminAttribute[];
+  attributeOptions: Record<string, AdminAttributeOption[]>;
+  values: Record<string, VariantFormValue>;
+  onAdd: (attributeId: string) => void;
+  onChange: (
+    attributeId: string,
+    update: Partial<VariantFormValue>,
+  ) => void;
+  onRemove: (attributeId: string) => void;
+}) {
+  return (
+    <div className="variant-attribute-editor">
+      <label>
+        Variant attribute
+        <select value="" onChange={(event) => onAdd(event.target.value)}>
+          <option value="">Choose attribute</option>
+          {attributes
+            .filter((attribute) => !getAttributeValue(values, attribute.id).selected)
+            .map((attribute) => (
+              <option key={attribute.id} value={attribute.id}>
+                {attribute.name}
+              </option>
+            ))}
+        </select>
+      </label>
+
+      <div className="attribute-form-list">
+        {attributes
+          .filter((attribute) => getAttributeValue(values, attribute.id).selected)
+          .map((attribute) => (
+            <AttributeValueControl
+              attribute={attribute}
+              key={attribute.id}
+              options={attributeOptions[attribute.id] ?? []}
+              value={getAttributeValue(values, attribute.id)}
+              onChange={(update) => onChange(attribute.id, update)}
+              onRemove={() => onRemove(attribute.id)}
+            />
+          ))}
+      </div>
     </div>
   );
 }
@@ -1194,6 +1312,41 @@ function getAttributeValue(
       optionIds: [],
     }
   );
+}
+
+function buildAttributePayload(
+  attribute: AdminAttribute,
+  values: Record<string, AttributeFormValue>,
+): SetProductAttributeValuePayload {
+  const value = getAttributeValue(values, attribute.id);
+
+  switch (attribute.dataType) {
+    case "TEXT":
+      return {
+        attributeId: attribute.id,
+        textValue: value.textValue,
+      };
+    case "NUMBER":
+      return {
+        attributeId: attribute.id,
+        numberValue: Number(value.numberValue),
+      };
+    case "BOOLEAN":
+      return {
+        attributeId: attribute.id,
+        booleanValue: value.booleanValue,
+      };
+    case "SELECT":
+      return {
+        attributeId: attribute.id,
+        optionId: value.optionId,
+      };
+    case "MULTI_SELECT":
+      return {
+        attributeId: attribute.id,
+        optionIds: value.optionIds,
+      };
+  }
 }
 
 function toSlug(value: string) {

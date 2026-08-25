@@ -1,9 +1,11 @@
 import {
   ConflictException,
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 
+import { AttributeDataType } from '../../generated/prisma/enums.cjs';
 import { PrismaService } from '../database/prisma.service';
 import { CreateAttributeOptionDto } from './dto/create-attribute-option.dto';
 import { UpdateAttributeOptionDto } from './dto/update-attribute-option.dto';
@@ -31,23 +33,125 @@ export class AttributeOptionService {
       });
   }
 
-  async findByAttribute(attributeDefinitionId: string) {
+  async findByAttribute(
+    attributeDefinitionId: string,
+    query?: {
+      page?: string;
+      pageSize?: string;
+      search?: string;
+      status?: string;
+    },
+  ) {
     await this.ensureActiveAttributeExists(attributeDefinitionId);
 
-    return this.prisma.attributeOption.findMany({
+    if (!query?.page && !query?.pageSize) {
+      return this.prisma.attributeOption.findMany({
+        where: {
+          attributeDefinitionId,
+          deletedAt: null,
+        },
+        orderBy: [
+          {
+            sortOrder: 'asc',
+          },
+          {
+            label: 'asc',
+          },
+        ],
+      });
+    }
+
+    const page = this.getPositiveInteger(query.page, 1);
+    const pageSize = Math.min(this.getPositiveInteger(query.pageSize, 10), 50);
+    const where = {
+      attributeDefinitionId,
+      deletedAt: null,
+      ...(query.search?.trim() && {
+        OR: [
+          {
+            label: {
+              contains: query.search.trim(),
+              mode: 'insensitive' as const,
+            },
+          },
+          {
+            value: {
+              contains: query.search.trim().toLowerCase(),
+              mode: 'insensitive' as const,
+            },
+          },
+        ],
+      }),
+      ...(query.status === 'active' && {
+        isActive: true,
+      }),
+      ...(query.status === 'inactive' && {
+        isActive: false,
+      }),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.attributeOption.findMany({
+        where,
+        orderBy: [
+          {
+            sortOrder: 'asc',
+          },
+          {
+            label: 'asc',
+          },
+        ],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.attributeOption.count({
+        where,
+      }),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    };
+  }
+
+  async checkValueAvailability(
+    attributeDefinitionId: string,
+    value: string,
+  ) {
+    await this.ensureActiveAttributeExists(attributeDefinitionId);
+
+    const normalizedValue = this.normalizeValue(value);
+    const option = await this.prisma.attributeOption.findUnique({
       where: {
-        attributeDefinitionId,
-        deletedAt: null,
+        attributeDefinitionId_value: {
+          attributeDefinitionId,
+          value: normalizedValue,
+        },
       },
-      orderBy: [
-        {
-          sortOrder: 'asc',
-        },
-        {
-          label: 'asc',
-        },
-      ],
+      select: {
+        id: true,
+        label: true,
+        deletedAt: true,
+      },
     });
+
+    return {
+      value: normalizedValue,
+      available: !option,
+      option: option
+        ? {
+            id: option.id,
+            label: option.label,
+            deletedAt: option.deletedAt,
+          }
+        : null,
+    };
   }
 
   async findOne(attributeDefinitionId: string, optionId: string) {
@@ -70,14 +174,8 @@ export class AttributeOptionService {
           ...(dto.label !== undefined && {
             label: dto.label.trim(),
           }),
-          ...(dto.value !== undefined && {
-            value: this.normalizeValue(dto.value),
-          }),
           ...(dto.sortOrder !== undefined && {
             sortOrder: dto.sortOrder,
-          }),
-          ...(dto.isActive !== undefined && {
-            isActive: dto.isActive,
           }),
         },
       })
@@ -85,6 +183,23 @@ export class AttributeOptionService {
         this.handleUniqueOptionError(error);
         throw error;
       });
+  }
+
+  async setActive(
+    attributeDefinitionId: string,
+    optionId: string,
+    isActive: boolean,
+  ) {
+    await this.getActiveOption(attributeDefinitionId, optionId);
+
+    return this.prisma.attributeOption.update({
+      where: {
+        id: optionId,
+      },
+      data: {
+        isActive,
+      },
+    });
   }
 
   async softDelete(attributeDefinitionId: string, optionId: string) {
@@ -110,11 +225,21 @@ export class AttributeOptionService {
       },
       select: {
         id: true,
+        dataType: true,
       },
     });
 
     if (!attribute) {
       throw new NotFoundException('Attribute definition not found');
+    }
+
+    if (
+      attribute.dataType !== AttributeDataType.SELECT &&
+      attribute.dataType !== AttributeDataType.MULTI_SELECT
+    ) {
+      throw new BadRequestException(
+        'Options can only be created for SELECT or MULTI_SELECT attributes',
+      );
     }
   }
 
@@ -139,6 +264,14 @@ export class AttributeOptionService {
 
   private normalizeValue(value: string): string {
     return value.trim().toLowerCase();
+  }
+
+  private getPositiveInteger(value: string | undefined, fallback: number) {
+    const parsedValue = Number(value);
+
+    return Number.isInteger(parsedValue) && parsedValue > 0
+      ? parsedValue
+      : fallback;
   }
 
   private handleUniqueOptionError(error: unknown): void {

@@ -105,6 +105,36 @@ export type CreateAdminAttributePayload = {
   isActive?: boolean;
 };
 
+export type UpdateAdminAttributePayload = Partial<CreateAdminAttributePayload>;
+
+export type AdminAttributeSlugAvailability = {
+  slug: string;
+  available: boolean;
+  attribute: {
+    id: string;
+    name: string;
+    deletedAt: string | null;
+  } | null;
+};
+
+export type PaginatedAdminAttributes = {
+  items: AdminAttribute[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+export type AdminAttributeListParams = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  dataType?: string;
+};
+
 export type AdminCategoryAttribute = {
   id: string;
   categoryId: string;
@@ -140,6 +170,36 @@ export type CreateAdminAttributeOptionPayload = {
   value: string;
   sortOrder?: number;
   isActive?: boolean;
+};
+
+export type UpdateAdminAttributeOptionPayload =
+  Partial<CreateAdminAttributeOptionPayload>;
+
+export type PaginatedAdminAttributeOptions = {
+  items: AdminAttributeOption[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+export type AdminAttributeOptionListParams = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+};
+
+export type AdminAttributeOptionValueAvailability = {
+  value: string;
+  available: boolean;
+  option: {
+    id: string;
+    label: string;
+    deletedAt: string | null;
+  } | null;
 };
 
 export type ProductMetadataResource =
@@ -610,6 +670,52 @@ export function getAdminAttributes(accessToken: string) {
   });
 }
 
+export function getAdminAttributesPage(
+  accessToken: string,
+  params: AdminAttributeListParams,
+) {
+  const queryParams = new URLSearchParams();
+
+  queryParams.set("page", String(params.page ?? 1));
+  queryParams.set("pageSize", String(params.pageSize ?? 10));
+
+  if (params.search?.trim()) {
+    queryParams.set("search", params.search.trim());
+  }
+
+  if (params.status && params.status !== "all") {
+    queryParams.set("status", params.status);
+  }
+
+  if (params.dataType && params.dataType !== "all") {
+    queryParams.set("dataType", params.dataType);
+  }
+
+  return apiRequest<PaginatedAdminAttributes>(
+    `/admin/attributes?${queryParams.toString()}`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function checkAdminAttributeSlugAvailability(
+  accessToken: string,
+  slug: string,
+  excludeId?: string,
+) {
+  const params = excludeId
+    ? `?excludeId=${encodeURIComponent(excludeId)}`
+    : "";
+
+  return apiRequest<AdminAttributeSlugAvailability>(
+    `/admin/attributes/slug-availability/${encodeURIComponent(slug)}${params}`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
 export function createAdminAttribute(
   accessToken: string,
   payload: CreateAdminAttributePayload,
@@ -618,6 +724,43 @@ export function createAdminAttribute(
     method: "POST",
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),
+  });
+}
+
+export function getAdminAttribute(accessToken: string, attributeId: string) {
+  return apiRequest<AdminAttribute>(`/admin/attributes/${attributeId}`, {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function updateAdminAttribute(
+  accessToken: string,
+  attributeId: string,
+  payload: UpdateAdminAttributePayload,
+) {
+  return apiRequest<AdminAttribute>(`/admin/attributes/${attributeId}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function setAdminAttributeActive(
+  accessToken: string,
+  attributeId: string,
+  isActive: boolean,
+) {
+  return apiRequest<AdminAttribute>(`/admin/attributes/${attributeId}/active`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify({ isActive }),
+  });
+}
+
+export function deleteAdminAttribute(accessToken: string, attributeId: string) {
+  return apiRequest<AdminAttribute>(`/admin/attributes/${attributeId}`, {
+    method: "DELETE",
+    headers: withAuth(accessToken),
   });
 }
 
@@ -648,6 +791,36 @@ export function assignAdminCategoryAttribute(
   );
 }
 
+export function updateAdminCategoryAttribute(
+  accessToken: string,
+  categoryId: string,
+  attributeDefinitionId: string,
+  payload: Omit<AssignCategoryAttributePayload, "attributeDefinitionId">,
+) {
+  return apiRequest<AdminCategoryAttribute>(
+    `/admin/categories/${categoryId}/attributes/${attributeDefinitionId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminCategoryAttribute(
+  accessToken: string,
+  categoryId: string,
+  attributeDefinitionId: string,
+) {
+  return apiRequest<AdminCategoryAttribute>(
+    `/admin/categories/${categoryId}/attributes/${attributeDefinitionId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
 export function createAdminAttributeOption(
   accessToken: string,
   attributeId: string,
@@ -663,12 +836,110 @@ export function createAdminAttributeOption(
   );
 }
 
+export function checkAdminAttributeOptionValueAvailability(
+  accessToken: string,
+  attributeId: string,
+  value: string,
+) {
+  return apiRequest<AdminAttributeOptionValueAvailability>(
+    `/admin/attributes/${attributeId}/options/value-availability/${encodeURIComponent(value)}`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function getAdminAttributeOption(
+  accessToken: string,
+  attributeId: string,
+  optionId: string,
+) {
+  return apiRequest<AdminAttributeOption>(
+    `/admin/attributes/${attributeId}/options/${optionId}`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function updateAdminAttributeOption(
+  accessToken: string,
+  attributeId: string,
+  optionId: string,
+  payload: UpdateAdminAttributeOptionPayload,
+) {
+  return apiRequest<AdminAttributeOption>(
+    `/admin/attributes/${attributeId}/options/${optionId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function setAdminAttributeOptionActive(
+  accessToken: string,
+  attributeId: string,
+  optionId: string,
+  isActive: boolean,
+) {
+  return apiRequest<AdminAttributeOption>(
+    `/admin/attributes/${attributeId}/options/${optionId}/active`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify({ isActive }),
+    },
+  );
+}
+
+export function deleteAdminAttributeOption(
+  accessToken: string,
+  attributeId: string,
+  optionId: string,
+) {
+  return apiRequest<AdminAttributeOption>(
+    `/admin/attributes/${attributeId}/options/${optionId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
 export function getAdminAttributeOptions(
   accessToken: string,
   attributeId: string,
 ) {
   return apiRequest<AdminAttributeOption[]>(
     `/admin/attributes/${attributeId}/options`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function getAdminAttributeOptionsPage(
+  accessToken: string,
+  attributeId: string,
+  params: AdminAttributeOptionListParams,
+) {
+  const queryParams = new URLSearchParams();
+
+  queryParams.set("page", String(params.page ?? 1));
+  queryParams.set("pageSize", String(params.pageSize ?? 10));
+
+  if (params.search?.trim()) {
+    queryParams.set("search", params.search.trim());
+  }
+
+  if (params.status && params.status !== "all") {
+    queryParams.set("status", params.status);
+  }
+
+  return apiRequest<PaginatedAdminAttributeOptions>(
+    `/admin/attributes/${attributeId}/options?${queryParams.toString()}`,
     {
       headers: withAuth(accessToken),
     },
@@ -700,6 +971,106 @@ export function setAdminProductAttributeValue(
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),
   });
+}
+
+export function getAdminProductAttributeValues(
+  accessToken: string,
+  productId: string,
+) {
+  return apiRequest<unknown[]>(`/admin/products/${productId}/attributes`, {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function updateAdminProductAttributeValue(
+  accessToken: string,
+  productId: string,
+  attributeId: string,
+  payload: Omit<SetProductAttributeValuePayload, "attributeId">,
+) {
+  return apiRequest<unknown[]>(
+    `/admin/products/${productId}/attributes/${attributeId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminProductAttributeValue(
+  accessToken: string,
+  productId: string,
+  attributeId: string,
+) {
+  return apiRequest<{ deleted: boolean; count: number }>(
+    `/admin/products/${productId}/attributes/${attributeId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function setAdminVariantAttributeValue(
+  accessToken: string,
+  productId: string,
+  variantId: string,
+  payload: SetProductAttributeValuePayload,
+) {
+  return apiRequest<unknown[]>(
+    `/admin/products/${productId}/variants/${variantId}/attributes`,
+    {
+      method: "POST",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function getAdminVariantAttributeValues(
+  accessToken: string,
+  productId: string,
+  variantId: string,
+) {
+  return apiRequest<unknown[]>(
+    `/admin/products/${productId}/variants/${variantId}/attributes`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function updateAdminVariantAttributeValue(
+  accessToken: string,
+  productId: string,
+  variantId: string,
+  attributeId: string,
+  payload: Omit<SetProductAttributeValuePayload, "attributeId">,
+) {
+  return apiRequest<unknown[]>(
+    `/admin/products/${productId}/variants/${variantId}/attributes/${attributeId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminVariantAttributeValue(
+  accessToken: string,
+  productId: string,
+  variantId: string,
+  attributeId: string,
+) {
+  return apiRequest<{ deleted: boolean; count: number }>(
+    `/admin/products/${productId}/variants/${variantId}/attributes/${attributeId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
 }
 
 export function getProductMetadataItems(

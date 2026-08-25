@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
@@ -27,14 +28,47 @@ export class AdminAttributeDefinitionController {
 
   @Get()
   @ResponseMessage('Attributes fetched successfully')
-  findAll() {
-    return this.attributeDefinitionService.findAll();
+  findAll(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('dataType') dataType?: string,
+  ) {
+    return this.attributeDefinitionService.findAll({
+      page,
+      pageSize,
+      search,
+      status,
+      dataType,
+    });
+  }
+
+  @Get('slug-availability/:slug')
+  @ResponseMessage('Attribute slug availability checked successfully')
+  checkSlugAvailability(
+    @Param('slug') slug: string,
+    @Query('excludeId') excludeId?: string,
+  ) {
+    return this.attributeDefinitionService.checkSlugAvailability(
+      slug,
+      excludeId,
+    );
   }
 
   @Get(':id')
   @ResponseMessage('Attribute fetched successfully')
   findOne(@Param('id') id: string) {
     return this.attributeDefinitionService.findOne(id);
+  }
+
+  @Patch(':id/active')
+  @ResponseMessage('Attribute status updated successfully')
+  setActive(
+    @Param('id') id: string,
+    @Body() dto: { isActive: boolean },
+  ) {
+    return this.attributeDefinitionService.setActive(id, dto.isActive);
   }
 
   @Patch(':id')
