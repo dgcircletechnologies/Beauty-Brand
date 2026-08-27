@@ -14,9 +14,13 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import {
   AdminCategory,
+  AdminCategoryImage,
   deleteAdminCategory,
+  deleteAdminCategoryImage,
   getAdminCategories,
   updateAdminCategory,
+  updateAdminCategoryImage,
+  uploadAdminCategoryImages,
 } from "@/lib/api/admin";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 
@@ -43,8 +47,10 @@ export default function AdminCategoriesPage() {
   const [editIsActive, setEditIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [imageActionError, setImageActionError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isImageSubmitting, setIsImageSubmitting] = useState(false);
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
   useEffect(() => {
@@ -194,12 +200,14 @@ export default function AdminCategoriesPage() {
     setSelectedCategoryId(category.id);
     setIsEditing(false);
     setModalError(null);
+    setImageActionError(null);
   }, []);
 
   const closeModal = useCallback(() => {
     setSelectedCategoryId(null);
     setIsEditing(false);
     setModalError(null);
+    setImageActionError(null);
   }, []);
 
   const startEditing = useCallback(() => {
@@ -213,7 +221,24 @@ export default function AdminCategoriesPage() {
     setEditIsActive(selectedCategory.isActive);
     setIsEditing(true);
     setModalError(null);
+    setImageActionError(null);
   }, [selectedCategory]);
+
+  const updateCategoryImages = useCallback(
+    (categoryId: string, images: AdminCategoryImage[]) => {
+      setCategories((currentCategories) =>
+        currentCategories.map((category) =>
+          category.id === categoryId
+            ? {
+                ...category,
+                images,
+              }
+            : category,
+        ),
+      );
+    },
+    [],
+  );
 
   const toggleExpanded = useCallback((categoryId: string) => {
     setExpandedIds((currentIds) => {
@@ -316,6 +341,96 @@ export default function AdminCategoriesPage() {
     }
   }, [accessToken, closeModal, selectedCategory, selectedChildren.length]);
 
+  const uploadCategoryImages = useCallback(
+    async (files: File[]) => {
+      if (!accessToken || !selectedCategory || !files.length) {
+        return;
+      }
+
+      setIsImageSubmitting(true);
+      setImageActionError(null);
+
+      try {
+        const images = await uploadAdminCategoryImages(
+          accessToken,
+          selectedCategory.id,
+          files,
+        );
+
+        updateCategoryImages(selectedCategory.id, images);
+      } catch (caughtError) {
+        setImageActionError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to upload category images",
+        );
+      } finally {
+        setIsImageSubmitting(false);
+      }
+    },
+    [accessToken, selectedCategory, updateCategoryImages],
+  );
+
+  const setPrimaryCategoryImage = useCallback(
+    async (imageId: string) => {
+      if (!accessToken || !selectedCategory) {
+        return;
+      }
+
+      setIsImageSubmitting(true);
+      setImageActionError(null);
+
+      try {
+        await updateAdminCategoryImage(accessToken, selectedCategory.id, imageId, {
+          isPrimary: true,
+        });
+        const images = (selectedCategory.images ?? []).map((image) => ({
+          ...image,
+          isPrimary: image.id === imageId,
+        }));
+
+        updateCategoryImages(selectedCategory.id, images);
+      } catch (caughtError) {
+        setImageActionError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to set primary image",
+        );
+      } finally {
+        setIsImageSubmitting(false);
+      }
+    },
+    [accessToken, selectedCategory, updateCategoryImages],
+  );
+
+  const removeCategoryImage = useCallback(
+    async (imageId: string) => {
+      if (!accessToken || !selectedCategory) {
+        return;
+      }
+
+      setIsImageSubmitting(true);
+      setImageActionError(null);
+
+      try {
+        await deleteAdminCategoryImage(accessToken, selectedCategory.id, imageId);
+        updateCategoryImages(
+          selectedCategory.id,
+          (selectedCategory.images ?? []).filter((image) => image.id !== imageId),
+        );
+      } catch (caughtError) {
+        setImageActionError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to delete category image",
+        );
+      } finally {
+        setIsImageSubmitting(false);
+      }
+    },
+    [accessToken, selectedCategory, updateCategoryImages],
+  );
+
   return (
     <main>
       <section className="dashboard-header">
@@ -401,6 +516,8 @@ export default function AdminCategoriesPage() {
           category={selectedCategory}
           childrenCount={selectedChildren.length}
           error={modalError}
+          imageActionError={imageActionError}
+          isImageSubmitting={isImageSubmitting}
           isEditing={isEditing}
           isSubmitting={isSubmitting}
           parentCategory={parentCategory}
@@ -417,8 +534,11 @@ export default function AdminCategoriesPage() {
           onChangeParentId={setEditParentId}
           onClose={closeModal}
           onDelete={removeCategory}
+          onDeleteImage={removeCategoryImage}
           onEdit={startEditing}
           onSave={saveCategory}
+          onSetPrimaryImage={setPrimaryCategoryImage}
+          onUploadImages={uploadCategoryImages}
         />
       ) : null}
     </main>
@@ -462,6 +582,11 @@ const CategoryTreeRow = memo(function CategoryTreeRow({
         >
           {hasChildren ? (isExpanded ? "-" : "+") : ""}
         </button>
+        <CategoryImageSlider
+          images={category.images ?? []}
+          name={category.name}
+          variant="thumb"
+        />
         <button
           className="category-tree-main"
           type="button"
@@ -470,8 +595,10 @@ const CategoryTreeRow = memo(function CategoryTreeRow({
           <strong>{category.name}</strong>
           <small>{category.slug}</small>
         </button>
-        <span>{category.isActive ? "Active" : "Inactive"}</span>
-        <span>
+        <span className="category-tree-badge">
+          {category.isActive ? "Active" : "Inactive"}
+        </span>
+        <span className="category-tree-badge">
           {hasChildren
             ? `${category.children.length} child${
                 category.children.length === 1 ? "" : "ren"
@@ -501,6 +628,8 @@ type CategoryDetailModalProps = {
   category: AdminCategory;
   childrenCount: number;
   error: string | null;
+  imageActionError: string | null;
+  isImageSubmitting: boolean;
   isEditing: boolean;
   isSubmitting: boolean;
   parentCategory: AdminCategory | null;
@@ -517,14 +646,19 @@ type CategoryDetailModalProps = {
   onChangeParentId: (value: string | null) => void;
   onClose: () => void;
   onDelete: () => void;
+  onDeleteImage: (imageId: string) => void;
   onEdit: () => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
+  onSetPrimaryImage: (imageId: string) => void;
+  onUploadImages: (files: File[]) => void;
 };
 
 const CategoryDetailModal = memo(function CategoryDetailModal({
   category,
   childrenCount,
   error,
+  imageActionError,
+  isImageSubmitting,
   isEditing,
   isSubmitting,
   parentCategory,
@@ -536,8 +670,11 @@ const CategoryDetailModal = memo(function CategoryDetailModal({
   onChangeParentId,
   onClose,
   onDelete,
+  onDeleteImage,
   onEdit,
   onSave,
+  onSetPrimaryImage,
+  onUploadImages,
 }: CategoryDetailModalProps) {
   return (
     <div className="modal-backdrop" role="presentation">
@@ -606,6 +743,55 @@ const CategoryDetailModal = memo(function CategoryDetailModal({
               />
               Active category
             </label>
+            <section className="variant-form-panel">
+              <div className="section-title">
+                <h3>Images</h3>
+                <span>{category.images?.length ?? 0}</span>
+              </div>
+              {imageActionError ? (
+                <p className="form-error">{imageActionError}</p>
+              ) : null}
+              <label>
+                Upload category images
+                <input
+                  accept="image/*"
+                  multiple
+                  type="file"
+                  onChange={(event) => {
+                    onUploadImages(Array.from(event.target.files ?? []));
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+              {category.images?.length ? (
+                <div className="product-image-grid">
+                  {category.images.map((image) => (
+                    <article className="product-image-card" key={image.id}>
+                      <img alt={image.altText ?? category.name} src={image.url} />
+                      <span>{image.isPrimary ? "Primary" : "Gallery"}</span>
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={isImageSubmitting || image.isPrimary}
+                        type="button"
+                        onClick={() => onSetPrimaryImage(image.id)}
+                      >
+                        Set Primary
+                      </button>
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={isImageSubmitting}
+                        type="button"
+                        onClick={() => onDeleteImage(image.id)}
+                      >
+                        Delete
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted-text">No category images uploaded yet.</p>
+              )}
+            </section>
             {error ? <p className="form-error">{error}</p> : null}
             <div className="form-actions">
               <button
@@ -627,6 +813,11 @@ const CategoryDetailModal = memo(function CategoryDetailModal({
           </form>
         ) : (
           <>
+            <CategoryImageSlider
+              images={category.images ?? []}
+              name={category.name}
+              variant="detail"
+            />
             <dl className="category-detail-grid">
               <div>
                 <dt>Name</dt>
@@ -680,6 +871,79 @@ const CategoryDetailModal = memo(function CategoryDetailModal({
         )}
       </section>
     </div>
+  );
+});
+
+type CategoryImageSliderProps = {
+  images: AdminCategoryImage[];
+  name: string;
+  variant: "thumb" | "detail";
+};
+
+const CategoryImageSlider = memo(function CategoryImageSlider({
+  images,
+  name,
+  variant,
+}: CategoryImageSliderProps) {
+  const [imageIndex, setImageIndex] = useState(0);
+  const safeImageIndex = images[imageIndex] ? imageIndex : 0;
+  const image = images[safeImageIndex] ?? null;
+
+  if (!image) {
+    return (
+      <span
+        className={
+          variant === "thumb"
+            ? "category-image-slider thumb empty"
+            : "category-image-slider detail empty"
+        }
+      >
+        No image
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={
+        variant === "thumb"
+          ? "category-image-slider thumb"
+          : "category-image-slider detail"
+      }
+    >
+      <img alt={image.altText ?? name} src={image.url} />
+      {images.length > 1 ? (
+        <span className="category-image-slider-actions">
+          <button
+            aria-label={`Previous image for ${name}`}
+            className="category-tree-toggle"
+            type="button"
+            onClick={() =>
+              setImageIndex((currentIndex) =>
+                currentIndex === 0 ? images.length - 1 : currentIndex - 1,
+              )
+            }
+          >
+            &lt;
+          </button>
+          <small>
+            {safeImageIndex + 1}/{images.length}
+          </small>
+          <button
+            aria-label={`Next image for ${name}`}
+            className="category-tree-toggle"
+            type="button"
+            onClick={() =>
+              setImageIndex((currentIndex) =>
+                currentIndex === images.length - 1 ? 0 : currentIndex + 1,
+              )
+            }
+          >
+            &gt;
+          </button>
+        </span>
+      ) : null}
+    </span>
   );
 });
 

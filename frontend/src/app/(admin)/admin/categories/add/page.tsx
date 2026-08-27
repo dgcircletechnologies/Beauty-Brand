@@ -21,6 +21,7 @@ import {
   createAdminCategory,
   getAdminAttributes,
   getAdminCategories,
+  uploadAdminCategoryImages,
 } from "@/lib/api/admin";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 
@@ -29,6 +30,12 @@ type SelectedCategoryAttribute = {
   isRequired: boolean;
   isVariantAttribute: boolean;
   sortOrder: number;
+};
+
+type ImageDraft = {
+  file: File;
+  key: string;
+  previewUrl: string;
 };
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -47,6 +54,7 @@ export default function AddCategoryPage() {
   const [description, setDescription] = useState("");
   const [parentId, setParentId] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [imageDrafts, setImageDrafts] = useState<ImageDraft[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -222,6 +230,7 @@ export default function AddCategoryPage() {
   );
 
   const resetForm = useCallback(() => {
+    imageDrafts.forEach((image) => URL.revokeObjectURL(image.previewUrl));
     setName("");
     setSlug("");
     setDescription("");
@@ -229,7 +238,31 @@ export default function AddCategoryPage() {
     setIsActive(true);
     setAttributeDefinitionId("");
     setSelectedAttributes([]);
+    setImageDrafts([]);
     setSlugStatus(null);
+  }, [imageDrafts]);
+
+  const addImageDrafts = useCallback((files: File[]) => {
+    setImageDrafts((currentImages) => [
+      ...currentImages,
+      ...files.map((file) => ({
+        file,
+        key: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+        previewUrl: URL.createObjectURL(file),
+      })),
+    ]);
+  }, []);
+
+  const removeImageDraft = useCallback((imageKey: string) => {
+    setImageDrafts((currentImages) => {
+      const image = currentImages.find((draft) => draft.key === imageKey);
+
+      if (image) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+
+      return currentImages.filter((draft) => draft.key !== imageKey);
+    });
   }, []);
 
   const handleSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
@@ -258,9 +291,24 @@ export default function AddCategoryPage() {
         ),
       );
 
+      let categoryImages: AdminCategory["images"] = [];
+
+      if (imageDrafts.length) {
+        categoryImages = await uploadAdminCategoryImages(
+          accessToken,
+          category.id,
+          imageDrafts.map((image) => image.file),
+        );
+      }
+
+      const categoryWithImages = {
+        ...category,
+        images: categoryImages,
+      };
+
       setSuccess("Category created successfully");
       setCategories((currentCategories) =>
-        [...currentCategories, category].sort(sortCategories),
+        [...currentCategories, categoryWithImages].sort(sortCategories),
       );
       resetForm();
     } catch (caughtError) {
@@ -281,6 +329,7 @@ export default function AddCategoryPage() {
     parentId,
     resetForm,
     selectedAttributes,
+    imageDrafts,
     slug,
   ]);
 
@@ -365,6 +414,44 @@ export default function AddCategoryPage() {
             />
             Active category
           </label>
+
+          <section className="variant-form-panel">
+            <div className="section-title">
+              <h2>Category Images</h2>
+              <span>{imageDrafts.length}</span>
+            </div>
+            <label>
+              Images
+              <input
+                accept="image/*"
+                multiple
+                type="file"
+                onChange={(event) => {
+                  addImageDrafts(Array.from(event.target.files ?? []));
+                  event.target.value = "";
+                }}
+              />
+            </label>
+            {imageDrafts.length ? (
+              <div className="product-image-grid">
+                {imageDrafts.map((image) => (
+                  <article className="product-image-card" key={image.key}>
+                    <img alt={image.file.name} src={image.previewUrl} />
+                    <span>{image.file.name}</span>
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      onClick={() => removeImageDraft(image.key)}
+                    >
+                      Remove
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="muted-text">No category images selected yet.</p>
+            )}
+          </section>
 
           <div className="form-divider" />
 

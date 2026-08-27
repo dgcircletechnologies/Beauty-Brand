@@ -9,6 +9,23 @@ export type AdminCategory = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  images?: AdminCategoryImage[];
+};
+
+export type AdminCategoryImage = {
+  id: string;
+  categoryId: string;
+  url: string;
+  publicId: string | null;
+  altText: string | null;
+  sortOrder: number;
+  isPrimary: boolean;
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  bytes: number | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CreateAdminCategoryPayload = {
@@ -619,6 +636,73 @@ export function deleteAdminCategory(accessToken: string, categoryId: string) {
     method: "DELETE",
     headers: withAuth(accessToken),
   });
+}
+
+export function getAdminCategoryImages(
+  accessToken: string,
+  categoryId: string,
+) {
+  return apiRequest<AdminCategoryImage[]>(
+    `/admin/categories/${categoryId}/images`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function uploadAdminCategoryImages(
+  accessToken: string,
+  categoryId: string,
+  files: File[],
+) {
+  const formData = new FormData();
+
+  files.forEach((file) => {
+    formData.append("images", file);
+  });
+
+  return apiRequest<AdminCategoryImage[]>(
+    `/admin/categories/${categoryId}/images`,
+    {
+      method: "POST",
+      headers: withAuth(accessToken),
+      body: formData,
+    },
+  );
+}
+
+export function updateAdminCategoryImage(
+  accessToken: string,
+  categoryId: string,
+  imageId: string,
+  payload: {
+    altText?: string;
+    sortOrder?: number;
+    isPrimary?: boolean;
+  },
+) {
+  return apiRequest<AdminCategoryImage>(
+    `/admin/categories/${categoryId}/images/${imageId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminCategoryImage(
+  accessToken: string,
+  categoryId: string,
+  imageId: string,
+) {
+  return apiRequest<AdminCategoryImage>(
+    `/admin/categories/${categoryId}/images/${imageId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
 }
 
 export function getAdminProducts(accessToken: string) {

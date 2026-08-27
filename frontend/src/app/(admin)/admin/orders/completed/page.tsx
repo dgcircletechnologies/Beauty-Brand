@@ -1,18 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { AdminOrderWorkspace } from "@/components/admin/admin-order-workspace";
 import { useAuth } from "@/contexts/auth-context";
 import * as adminApi from "@/lib/api/admin";
-
-function formatMoney(
-  amount: number | string,
-  currency: { code: string; symbol: string | null; decimalDigits: number },
-) {
-  return `${currency.symbol ?? currency.code}${Number(amount).toFixed(
-    currency.decimalDigits,
-  )}`;
-}
 
 export default function AdminCompletedOrdersPage() {
   const { accessToken } = useAuth();
@@ -29,11 +21,14 @@ export default function AdminCompletedOrdersPage() {
     const token = accessToken;
 
     async function loadOrders() {
+      setIsLoading(true);
+      setError(null);
+
       try {
         const nextOrders = await adminApi.getAdminOrders(token);
 
         if (isMounted) {
-          setOrders(nextOrders.filter((order) => order.status === "DELIVERED"));
+          setOrders(nextOrders);
         }
       } catch (caughtError) {
         if (isMounted) {
@@ -57,6 +52,11 @@ export default function AdminCompletedOrdersPage() {
     };
   }, [accessToken]);
 
+  const completedOrders = useMemo(
+    () => orders.filter((order) => order.status === "DELIVERED"),
+    [orders],
+  );
+
   return (
     <main>
       <section className="dashboard-header">
@@ -69,37 +69,13 @@ export default function AdminCompletedOrdersPage() {
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      {isLoading ? (
-        <section className="empty-surface">
-          <h2>Loading completed orders...</h2>
-        </section>
-      ) : orders.length ? (
-        <section className="catalog-section">
-          <div className="section-title">
-            <h2>Delivered</h2>
-            <span>{orders.length}</span>
-          </div>
-          <div className="admin-order-list">
-            {orders.map((order) => (
-              <div className="admin-order-row" key={order.id}>
-                <span>
-                  <strong>#{order.orderNumber}</strong>
-                  <small>{order.customerEmail}</small>
-                </span>
-                <span>{order.items.length} items</span>
-                <strong>
-                  {formatMoney(order.displayTotalAmount, order.displayCurrency)}
-                </strong>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <section className="empty-surface">
-          <h2>No completed orders</h2>
-          <p>Delivered orders will appear here.</p>
-        </section>
-      )}
+      <AdminOrderWorkspace
+        emptyText="Delivered orders will appear here."
+        emptyTitle="No completed orders"
+        isLoading={isLoading}
+        orders={completedOrders}
+        title="Delivered Orders"
+      />
     </main>
   );
 }

@@ -4,22 +4,12 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   AdminOrderWorkspace,
-  activeOrderStatuses,
   formatStatus,
 } from "@/components/admin/admin-order-workspace";
 import { useAuth } from "@/contexts/auth-context";
 import * as adminApi from "@/lib/api/admin";
 
-const orderStatuses = [
-  "PROCESSING",
-  "CANCELLATION_REQUESTED",
-  "SHIPPED",
-  "DELIVERED",
-  "CANCELLED",
-  "PAYMENT_FAILED",
-];
-
-export default function AdminOrderStatusPage() {
+export default function AdminNewOrdersPage() {
   const { accessToken } = useAuth();
   const [orders, setOrders] = useState<adminApi.AdminOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,7 +31,7 @@ export default function AdminOrderStatusPage() {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to load orders",
+          : "Unable to load new orders",
       );
     } finally {
       setIsLoading(false);
@@ -71,7 +61,7 @@ export default function AdminOrderStatusPage() {
           setError(
             caughtError instanceof Error
               ? caughtError.message
-              : "Unable to load orders",
+              : "Unable to load new orders",
           );
         }
       } finally {
@@ -88,12 +78,12 @@ export default function AdminOrderStatusPage() {
     };
   }, [accessToken]);
 
-  const openOrders = useMemo(
-    () => orders.filter((order) => activeOrderStatuses.includes(order.status)),
+  const newOrders = useMemo(
+    () => orders.filter((order) => order.status === "PAID"),
     [orders],
   );
 
-  const updateStatus = useCallback(
+  const moveOrder = useCallback(
     async (
       event: FormEvent<HTMLFormElement>,
       orderId: string,
@@ -114,16 +104,16 @@ export default function AdminOrderStatusPage() {
       try {
         await adminApi.updateAdminOrderStatus(accessToken, orderId, {
           status: String(formData.get("status")),
-          reason: String(formData.get("reason") || ""),
+          reason: String(formData.get("reason") || "New order accepted"),
         });
-        setSuccess("Order status updated.");
+        setSuccess("New order moved.");
         await loadOrders();
         close();
       } catch (caughtError) {
         setError(
           caughtError instanceof Error
             ? caughtError.message
-            : "Unable to update order status",
+            : "Unable to move order",
         );
       } finally {
         setIsSubmitting(false);
@@ -132,16 +122,16 @@ export default function AdminOrderStatusPage() {
     [accessToken, loadOrders],
   );
 
-  const renderStatusActions = useCallback(
+  const renderNewOrderActions = useCallback(
     (order: adminApi.AdminOrder, { close }: { close: () => void }) => (
       <form
         className="admin-form compact-admin-form"
-        onSubmit={(event) => void updateStatus(event, order.id, close)}
+        onSubmit={(event) => void moveOrder(event, order.id, close)}
       >
         <label>
-          Next status
-          <select name="status" defaultValue={order.status}>
-            {orderStatuses.map((status) => (
+          Move to
+          <select name="status" defaultValue="PROCESSING">
+            {["PROCESSING", "SHIPPED", "CANCELLED"].map((status) => (
               <option key={status} value={status}>
                 {formatStatus(status)}
               </option>
@@ -157,11 +147,11 @@ export default function AdminOrderStatusPage() {
           disabled={isSubmitting}
           type="submit"
         >
-          {isSubmitting ? "Updating..." : "Update Status"}
+          {isSubmitting ? "Moving..." : "Move Order"}
         </button>
       </form>
     ),
-    [isSubmitting, updateStatus],
+    [isSubmitting, moveOrder],
   );
 
   return (
@@ -169,8 +159,8 @@ export default function AdminOrderStatusPage() {
       <section className="dashboard-header">
         <div>
           <p className="eyebrow">Orders</p>
-          <h1>Status Updates</h1>
-          <p>Move active orders through fulfillment states.</p>
+          <h1>New Orders</h1>
+          <p>Review paid orders before they enter processing.</p>
         </div>
       </section>
 
@@ -178,12 +168,12 @@ export default function AdminOrderStatusPage() {
       {success ? <p className="form-success">{success}</p> : null}
 
       <AdminOrderWorkspace
-        emptyText="No active orders need status updates."
-        emptyTitle="No active orders"
+        emptyText="Paid orders will appear here until their status changes."
+        emptyTitle="No new orders"
         isLoading={isLoading}
-        orders={openOrders}
-        renderActions={renderStatusActions}
-        title="Active Orders"
+        orders={newOrders}
+        renderActions={renderNewOrderActions}
+        title="New Orders"
       />
     </main>
   );

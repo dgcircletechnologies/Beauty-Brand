@@ -84,6 +84,10 @@ const orderLinks = [
     label: "All Orders",
   },
   {
+    href: "/admin/orders/new",
+    label: "New Orders",
+  },
+  {
     href: "/admin/orders/status",
     label: "Status Updates",
   },
