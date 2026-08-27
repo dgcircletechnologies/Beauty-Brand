@@ -19,6 +19,23 @@ export type CreateAdminCategoryPayload = {
   isActive?: boolean;
 };
 
+export type UpdateAdminCategoryPayload = {
+  name?: string;
+  description?: string;
+  parentId?: string | null;
+  isActive?: boolean;
+};
+
+export type AdminCategorySlugAvailability = {
+  slug: string;
+  available: boolean;
+  category: {
+    id: string;
+    name: string;
+    deletedAt: string | null;
+  } | null;
+};
+
 export type AdminProductCategory = {
   productId: string;
   categoryId: string;
@@ -512,6 +529,23 @@ export function getAdminCategories(accessToken: string) {
   });
 }
 
+export function checkAdminCategorySlugAvailability(
+  accessToken: string,
+  slug: string,
+  excludeId?: string,
+) {
+  const params = excludeId
+    ? `?excludeId=${encodeURIComponent(excludeId)}`
+    : "";
+
+  return apiRequest<AdminCategorySlugAvailability>(
+    `/admin/categories/slug-availability/${encodeURIComponent(slug)}${params}`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
 export function createAdminCategory(
   accessToken: string,
   payload: CreateAdminCategoryPayload,
@@ -520,6 +554,25 @@ export function createAdminCategory(
     method: "POST",
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminCategory(
+  accessToken: string,
+  categoryId: string,
+  payload: UpdateAdminCategoryPayload,
+) {
+  return apiRequest<AdminCategory>(`/admin/categories/${categoryId}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAdminCategory(accessToken: string, categoryId: string) {
+  return apiRequest<AdminCategory>(`/admin/categories/${categoryId}`, {
+    method: "DELETE",
+    headers: withAuth(accessToken),
   });
 }
 

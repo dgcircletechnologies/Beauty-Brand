@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { CategoryService } from '../category.service';
@@ -29,6 +30,15 @@ export class AdminCategoryController {
     return this.categoryService.findAll();
   }
 
+  @Get('slug-availability/:slug')
+  @ResponseMessage('Category slug availability checked successfully')
+  checkSlugAvailability(
+    @Param('slug') slug: string,
+    @Query('excludeId') excludeId?: string,
+  ) {
+    return this.categoryService.checkSlugAvailability(slug, excludeId);
+  }
+
   @Get(':id')
   @ResponseMessage('Category fetched successfully')
   findOne(@Param('id') id: string) {
@@ -43,7 +53,7 @@ export class AdminCategoryController {
 
   @Delete(':id')
   @ResponseMessage('Category deleted successfully')
-  softDelete(@Param('id') id: string) {
-    return this.categoryService.softDelete(id);
+  delete(@Param('id') id: string) {
+    return this.categoryService.delete(id);
   }
 }

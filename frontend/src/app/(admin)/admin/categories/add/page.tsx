@@ -2,17 +2,27 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import {
   AdminAttribute,
   AdminCategory,
+  AdminCategorySlugAvailability,
   assignAdminCategoryAttribute,
+  checkAdminCategorySlugAvailability,
   createAdminCategory,
   getAdminAttributes,
   getAdminCategories,
 } from "@/lib/api/admin";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 
 type SelectedCategoryAttribute = {
   attributeDefinitionId: string;
@@ -20,6 +30,8 @@ type SelectedCategoryAttribute = {
   isVariantAttribute: boolean;
   sortOrder: number;
 };
+
+const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export default function AddCategoryPage() {
   const router = useRouter();
@@ -39,6 +51,10 @@ export default function AddCategoryPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [slugStatus, setSlugStatus] =
+    useState<AdminCategorySlugAvailability | null>(null);
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
+  const debouncedSlug = useDebouncedValue(slug, 450);
 
   useEffect(() => {
     if (!accessToken) {
@@ -90,15 +106,63 @@ export default function AddCategoryPage() {
     return categories.filter((category) => category.isActive);
   }, [categories]);
 
-  function handleNameChange(nextName: string) {
+  useEffect(() => {
+    if (!accessToken || !debouncedSlug || !slugPattern.test(debouncedSlug)) {
+      return;
+    }
+
+    let isMounted = true;
+    const token = accessToken;
+    const slugSnapshot = debouncedSlug;
+
+    async function checkSlug() {
+      setIsCheckingSlug(true);
+
+      try {
+        const nextStatus = await checkAdminCategorySlugAvailability(
+          token,
+          slugSnapshot,
+        );
+
+        if (isMounted) {
+          setSlugStatus(nextStatus);
+        }
+      } catch {
+        if (isMounted) {
+          setSlugStatus(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsCheckingSlug(false);
+        }
+      }
+    }
+
+    void checkSlug();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, debouncedSlug]);
+
+  const slugIsValid = slugPattern.test(slug);
+  const slugIsAvailable = slugStatus?.slug === slug && slugStatus.available;
+  const canSubmit =
+    Boolean(name.trim()) &&
+    slugIsValid &&
+    slugIsAvailable &&
+    !isSubmitting &&
+    !isCheckingSlug;
+
+  const handleNameChange = useCallback((nextName: string) => {
     setName(nextName);
 
     if (!slug) {
       setSlug(toSlug(nextName));
     }
-  }
+  }, [slug]);
 
-  function addSelectedAttribute() {
+  const addSelectedAttribute = useCallback(() => {
     if (!attributeDefinitionId) {
       return;
     }
@@ -124,37 +188,54 @@ export default function AddCategoryPage() {
       ];
     });
     setAttributeDefinitionId("");
-  }
+  }, [attributeDefinitionId]);
 
-  function removeSelectedAttribute(attributeDefinitionIdToRemove: string) {
-    setSelectedAttributes((currentAttributes) =>
-      currentAttributes.filter(
-        (attribute) =>
-          attribute.attributeDefinitionId !== attributeDefinitionIdToRemove,
-      ),
-    );
-  }
+  const removeSelectedAttribute = useCallback(
+    (attributeDefinitionIdToRemove: string) => {
+      setSelectedAttributes((currentAttributes) =>
+        currentAttributes.filter(
+          (attribute) =>
+            attribute.attributeDefinitionId !== attributeDefinitionIdToRemove,
+        ),
+      );
+    },
+    [],
+  );
 
-  function updateSelectedAttribute(
-    attributeDefinitionId: string,
-    updates: Partial<SelectedCategoryAttribute>,
-  ) {
-    setSelectedAttributes((currentAttributes) =>
-      currentAttributes.map((attribute) =>
-        attribute.attributeDefinitionId === attributeDefinitionId
-          ? {
-              ...attribute,
-              ...updates,
-            }
-          : attribute,
-      ),
-    );
-  }
+  const updateSelectedAttribute = useCallback(
+    (
+      attributeDefinitionId: string,
+      updates: Partial<SelectedCategoryAttribute>,
+    ) => {
+      setSelectedAttributes((currentAttributes) =>
+        currentAttributes.map((attribute) =>
+          attribute.attributeDefinitionId === attributeDefinitionId
+            ? {
+                ...attribute,
+                ...updates,
+              }
+            : attribute,
+        ),
+      );
+    },
+    [],
+  );
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const resetForm = useCallback(() => {
+    setName("");
+    setSlug("");
+    setDescription("");
+    setParentId("");
+    setIsActive(true);
+    setAttributeDefinitionId("");
+    setSelectedAttributes([]);
+    setSlugStatus(null);
+  }, []);
+
+  const handleSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!accessToken) {
+    if (!accessToken || !canSubmit) {
       return;
     }
 
@@ -178,13 +259,10 @@ export default function AddCategoryPage() {
       );
 
       setSuccess("Category created successfully");
-      setName("");
-      setSlug("");
-      setDescription("");
-      setParentId("");
-      setIsActive(true);
-      setAttributeDefinitionId("");
-      setSelectedAttributes([]);
+      setCategories((currentCategories) =>
+        [...currentCategories, category].sort(sortCategories),
+      );
+      resetForm();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -194,7 +272,17 @@ export default function AddCategoryPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }
+  }, [
+    accessToken,
+    canSubmit,
+    description,
+    isActive,
+    name,
+    parentId,
+    resetForm,
+    selectedAttributes,
+    slug,
+  ]);
 
   return (
     <main>
@@ -228,11 +316,24 @@ export default function AddCategoryPage() {
                 pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
                 required
               />
+              {slug ? (
+                <small
+                  className={slugIsAvailable ? "form-success" : "form-error"}
+                >
+                  {isCheckingSlug
+                    ? "Checking slug..."
+                    : !slugIsValid
+                      ? "Use lowercase letters, numbers, and single hyphens only."
+                      : slugIsAvailable
+                        ? "Slug is available."
+                        : "Slug is already in use."}
+                </small>
+              ) : null}
             </label>
           </div>
 
           <label>
-            Parent category
+            Parent or middle category
             <select
               disabled={isLoading}
               value={parentId}
@@ -319,61 +420,13 @@ export default function AddCategoryPage() {
                 }
 
                 return (
-                  <article className="attribute-picker-row" key={attribute.id}>
-                    <div className="attribute-picker-heading">
-                      <span>
-                        <strong>{attribute.name}</strong>
-                        <small>{attribute.dataType.replace("_", " ")}</small>
-                      </span>
-                      <button
-                        className="secondary-button compact-button"
-                        type="button"
-                        onClick={() => removeSelectedAttribute(attribute.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-
-                    <div className="attribute-picker-controls">
-                      <label className="checkbox-field">
-                        <input
-                          checked={selectedAttribute.isRequired}
-                          type="checkbox"
-                          onChange={(event) =>
-                            updateSelectedAttribute(attribute.id, {
-                              isRequired: event.target.checked,
-                            })
-                          }
-                        />
-                        Required
-                      </label>
-                      <label className="checkbox-field">
-                        <input
-                          checked={selectedAttribute.isVariantAttribute}
-                          type="checkbox"
-                          onChange={(event) =>
-                            updateSelectedAttribute(attribute.id, {
-                              isVariantAttribute: event.target.checked,
-                            })
-                          }
-                        />
-                        Variant
-                      </label>
-                      <label>
-                        Sort
-                        <input
-                          min={0}
-                          type="number"
-                          value={selectedAttribute.sortOrder}
-                          onChange={(event) =>
-                            updateSelectedAttribute(attribute.id, {
-                              sortOrder: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                  </article>
+                  <SelectedAttributeRow
+                    attribute={attribute}
+                    key={attribute.id}
+                    selectedAttribute={selectedAttribute}
+                    onRemove={removeSelectedAttribute}
+                    onUpdate={updateSelectedAttribute}
+                  />
                 );
               })}
               {selectedAttributes.length === 0 ? (
@@ -391,7 +444,7 @@ export default function AddCategoryPage() {
             <button
               className="primary-button"
               type="submit"
-              disabled={isSubmitting}
+              disabled={!canSubmit}
             >
               {isSubmitting ? "Creating..." : "Create Category"}
             </button>
@@ -407,6 +460,83 @@ export default function AddCategoryPage() {
       </section>
     </main>
   );
+}
+
+const SelectedAttributeRow = memo(function SelectedAttributeRow({
+  attribute,
+  selectedAttribute,
+  onRemove,
+  onUpdate,
+}: {
+  attribute: AdminAttribute;
+  selectedAttribute: SelectedCategoryAttribute;
+  onRemove: (attributeId: string) => void;
+  onUpdate: (
+    attributeDefinitionId: string,
+    updates: Partial<SelectedCategoryAttribute>,
+  ) => void;
+}) {
+  return (
+    <article className="attribute-picker-row">
+      <div className="attribute-picker-heading">
+        <span>
+          <strong>{attribute.name}</strong>
+          <small>{attribute.dataType.replace("_", " ")}</small>
+        </span>
+        <button
+          className="secondary-button compact-button"
+          type="button"
+          onClick={() => onRemove(attribute.id)}
+        >
+          Remove
+        </button>
+      </div>
+
+      <div className="attribute-picker-controls">
+        <label className="checkbox-field">
+          <input
+            checked={selectedAttribute.isRequired}
+            type="checkbox"
+            onChange={(event) =>
+              onUpdate(attribute.id, {
+                isRequired: event.target.checked,
+              })
+            }
+          />
+          Required
+        </label>
+        <label className="checkbox-field">
+          <input
+            checked={selectedAttribute.isVariantAttribute}
+            type="checkbox"
+            onChange={(event) =>
+              onUpdate(attribute.id, {
+                isVariantAttribute: event.target.checked,
+              })
+            }
+          />
+          Variant
+        </label>
+        <label>
+          Sort
+          <input
+            min={0}
+            type="number"
+            value={selectedAttribute.sortOrder}
+            onChange={(event) =>
+              onUpdate(attribute.id, {
+                sortOrder: Number(event.target.value),
+              })
+            }
+          />
+        </label>
+      </div>
+    </article>
+  );
+});
+
+function sortCategories(first: AdminCategory, second: AdminCategory) {
+  return first.name.localeCompare(second.name);
 }
 
 function toSlug(value: string) {

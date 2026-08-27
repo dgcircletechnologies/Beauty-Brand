@@ -89,6 +89,32 @@ export class CategoryService {
     return this.getActiveCategoryById(id);
   }
 
+  async checkSlugAvailability(slug: string, excludeId?: string) {
+    const normalizedSlug = this.normalizeSlug(slug);
+    const category = await this.prisma.category.findUnique({
+      where: {
+        slug: normalizedSlug,
+      },
+      select: {
+        id: true,
+        name: true,
+        deletedAt: true,
+      },
+    });
+
+    return {
+      slug: normalizedSlug,
+      available: !category || category.id === excludeId,
+      category: category
+        ? {
+            id: category.id,
+            name: category.name,
+            deletedAt: category.deletedAt,
+          }
+        : null,
+    };
+  }
+
   findPublicCategories() {
     return this.prisma.category.findMany({
       where: {
@@ -283,16 +309,24 @@ export class CategoryService {
       });
   }
 
-  async softDelete(id: string) {
-    await this.getActiveCategoryById(id);
+  async delete(id: string) {
+    const category = await this.getActiveCategoryById(id);
 
-    return this.prisma.category.update({
+    if (category.children.length > 0) {
+      throw new BadRequestException(
+        'Remove child categories before deleting this category',
+      );
+    }
+
+    if (category.parentId) {
+      throw new BadRequestException(
+        'Remove the parent category before deleting this category',
+      );
+    }
+
+    return this.prisma.category.delete({
       where: {
         id,
-      },
-      data: {
-        deletedAt: new Date(),
-        isActive: false,
       },
     });
   }
@@ -447,9 +481,6 @@ export class CategoryService {
     return {
       ...(dto.name !== undefined && {
         name: dto.name.trim(),
-      }),
-      ...(dto.slug !== undefined && {
-        slug: this.normalizeSlug(dto.slug),
       }),
       ...(dto.description !== undefined && {
         description: this.nullableTrim(dto.description),

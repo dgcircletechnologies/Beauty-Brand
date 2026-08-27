@@ -5,6 +5,8 @@ import { CategoryService } from './category.service';
 
 type CategoryDelegateMock = {
   create: jest.Mock;
+  delete: jest.Mock;
+  findUnique: jest.Mock;
   findFirst: jest.Mock;
   findMany: jest.Mock;
   update: jest.Mock;
@@ -36,6 +38,8 @@ describe('CategoryService', () => {
   beforeEach(async () => {
     category = {
       create: jest.fn(),
+      delete: jest.fn(),
+      findUnique: jest.fn(),
       findFirst: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
@@ -170,6 +174,37 @@ describe('CategoryService', () => {
       },
       orderBy: {
         name: 'asc',
+      },
+    });
+  });
+
+  it('checks category slug availability', async () => {
+    category.findUnique.mockResolvedValue({
+      id: 'category_1',
+      name: 'Skin Care',
+      deletedAt: null,
+    });
+
+    await expect(service.checkSlugAvailability(' Skin-Care ')).resolves.toEqual(
+      {
+        slug: 'skin-care',
+        available: false,
+        category: {
+          id: 'category_1',
+          name: 'Skin Care',
+          deletedAt: null,
+        },
+      },
+    );
+
+    expect(category.findUnique).toHaveBeenCalledWith({
+      where: {
+        slug: 'skin-care',
+      },
+      select: {
+        id: true,
+        name: true,
+        deletedAt: true,
       },
     });
   });
@@ -571,5 +606,56 @@ describe('CategoryService', () => {
       },
     });
     expect(categoryClosure.createMany).not.toHaveBeenCalled();
+  });
+
+  it('blocks deleting a category with children', async () => {
+    category.findFirst.mockResolvedValue({
+      id: 'category_1',
+      parentId: null,
+      children: [
+        {
+          id: 'child_1',
+        },
+      ],
+    });
+
+    await expect(service.delete('category_1')).rejects.toThrow(
+      'Remove child categories before deleting this category',
+    );
+    expect(category.delete).not.toHaveBeenCalled();
+    expect(category.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks deleting a child category until its parent is removed', async () => {
+    category.findFirst.mockResolvedValue({
+      id: 'category_1',
+      parentId: 'parent_1',
+      children: [],
+    });
+
+    await expect(service.delete('category_1')).rejects.toThrow(
+      'Remove the parent category before deleting this category',
+    );
+    expect(category.delete).not.toHaveBeenCalled();
+    expect(category.update).not.toHaveBeenCalled();
+  });
+
+  it('hard deletes a root category without child categories', async () => {
+    const deletedCategory = {
+      id: 'category_1',
+      parentId: null,
+      children: [],
+    };
+
+    category.findFirst.mockResolvedValue(deletedCategory);
+    category.delete.mockResolvedValue(deletedCategory);
+
+    await expect(service.delete('category_1')).resolves.toBe(deletedCategory);
+
+    expect(category.delete).toHaveBeenCalledWith({
+      where: {
+        id: 'category_1',
+      },
+    });
   });
 });
