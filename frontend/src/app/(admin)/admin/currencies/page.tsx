@@ -68,7 +68,37 @@ export default function AdminCurrenciesPage() {
     () => currencies.filter((currency) => currency.status === "ACTIVE"),
     [currencies],
   );
-  const baseCurrency = currencies.find((currency) => currency.isBase);
+  const inactiveCurrencies = useMemo(
+    () => currencies.filter((currency) => currency.status === "INACTIVE"),
+    [currencies],
+  );
+  const baseCurrency = useMemo(
+    () => currencies.find((currency) => currency.isBase) ?? null,
+    [currencies],
+  );
+  const latestRates = useMemo(
+    () => exchangeRates.slice(0, 5),
+    [exchangeRates],
+  );
+  const coveredActiveCurrencies = useMemo(() => {
+    if (!baseCurrency) {
+      return 0;
+    }
+
+    return activeCurrencies.filter(
+      (currency) =>
+        currency.code === baseCurrency.code ||
+        exchangeRates.some(
+          (rate) =>
+            rate.baseCurrencyCode === baseCurrency.code &&
+            rate.quoteCurrencyCode === currency.code &&
+            (!rate.expiresAt || new Date(rate.expiresAt) > new Date()),
+        ),
+    ).length;
+  }, [activeCurrencies, baseCurrency, exchangeRates]);
+  const coveragePercent = activeCurrencies.length
+    ? Math.round((coveredActiveCurrencies / activeCurrencies.length) * 100)
+    : 0;
 
   return (
     <main>
@@ -82,48 +112,83 @@ export default function AdminCurrenciesPage() {
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      <section className="metadata-overview-grid">
-        <article className="metadata-overview-card">
+      <section className="currency-hero-panel">
+        <div>
+          <p className="eyebrow">Base Currency</p>
+          <h2>{isLoading ? "Loading..." : baseCurrency?.code ?? "Not Set"}</h2>
+          <p>
+            {baseCurrency
+              ? `${baseCurrency.name}${baseCurrency.symbol ? ` (${baseCurrency.symbol})` : ""}`
+              : "Set a base currency before relying on storefront conversions."}
+          </p>
+        </div>
+        <div className="currency-coverage">
+          <span>{coveragePercent}%</span>
           <div>
-            <h2>Active Currencies</h2>
-            <p>Available to customers and cart pricing.</p>
+            <i style={{ width: `${coveragePercent}%` }} />
           </div>
+          <small>
+            {coveredActiveCurrencies} of {activeCurrencies.length} active
+            currencies covered
+          </small>
+        </div>
+      </section>
+
+      <section className="currency-metric-grid">
+        <article>
+          <span>Active</span>
           <strong>{isLoading ? "..." : activeCurrencies.length}</strong>
         </article>
-        <article className="metadata-overview-card">
-          <div>
-            <h2>Base Currency</h2>
-            <p>Stored internally for products, carts, and orders.</p>
-          </div>
-          <strong>{isLoading ? "..." : baseCurrency?.code ?? "None"}</strong>
+        <article>
+          <span>Inactive</span>
+          <strong>{isLoading ? "..." : inactiveCurrencies.length}</strong>
         </article>
-        <article className="metadata-overview-card">
-          <div>
-            <h2>Exchange Rates</h2>
-            <p>Managed conversion records.</p>
-          </div>
+        <article>
+          <span>Exchange Rates</span>
           <strong>{isLoading ? "..." : exchangeRates.length}</strong>
         </article>
       </section>
 
-      <section className="metadata-overview-grid">
-        <Link className="metadata-overview-card" href="/admin/currencies/list">
-          <div>
-            <h2>Currency List</h2>
-            <p>Add currencies, set the base currency, and toggle availability.</p>
+      <section className="currency-workspace">
+        <div className="catalog-section">
+          <div className="section-title">
+            <h2>Quick Actions</h2>
           </div>
-          <strong>{currencies.length}</strong>
-        </Link>
-        <Link
-          className="metadata-overview-card"
-          href="/admin/currencies/exchange-rates"
-        >
-          <div>
-            <h2>Exchange Rates</h2>
-            <p>Add and review conversion rates between active currencies.</p>
+          <div className="currency-action-grid">
+            <Link href="/admin/currencies/list">
+              <strong>Currency List</strong>
+              <span>Add currencies, set base currency, and toggle status.</span>
+            </Link>
+            <Link href="/admin/currencies/exchange-rates">
+              <strong>Exchange Rates</strong>
+              <span>Create conversion rates between active currencies.</span>
+            </Link>
           </div>
-          <strong>{exchangeRates.length}</strong>
-        </Link>
+        </div>
+
+        <div className="catalog-section">
+          <div className="section-title">
+            <h2>Latest Rates</h2>
+            <span>{latestRates.length}</span>
+          </div>
+          <div className="admin-data-list">
+            {latestRates.map((rate) => (
+              <article className="exchange-rate-card" key={rate.id}>
+                <div>
+                  <h3>
+                    {rate.baseCurrencyCode} to {rate.quoteCurrencyCode}
+                  </h3>
+                  <p>{rate.provider}</p>
+                </div>
+                <strong>{Number(rate.rate).toFixed(6)}</strong>
+                <span>{new Date(rate.effectiveAt).toLocaleDateString()}</span>
+              </article>
+            ))}
+            {!isLoading && latestRates.length === 0 ? (
+              <p className="muted-text">No exchange rates configured yet.</p>
+            ) : null}
+          </div>
+        </div>
       </section>
     </main>
   );

@@ -230,10 +230,22 @@ export class CurrencyService {
   async createExchangeRate(dto: CreateExchangeRateDto) {
     const baseCurrencyCode = this.normalizeCurrencyCode(dto.baseCurrencyCode);
     const quoteCurrencyCode = this.normalizeCurrencyCode(dto.quoteCurrencyCode);
+    const effectiveAt = new Date(dto.effectiveAt);
+    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
 
     if (baseCurrencyCode === quoteCurrencyCode) {
       throw new BadRequestException(
         'Base and quote currency must be different',
+      );
+    }
+
+    if (Number(dto.rate) <= 0) {
+      throw new BadRequestException('Exchange rate must be greater than 0');
+    }
+
+    if (expiresAt && expiresAt <= effectiveAt) {
+      throw new BadRequestException(
+        'Expiry date must be later than effective date',
       );
     }
 
@@ -249,8 +261,8 @@ export class CurrencyService {
           quoteCurrencyCode,
           rate: dto.rate,
           provider: dto.provider.trim(),
-          effectiveAt: new Date(dto.effectiveAt),
-          expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+          effectiveAt,
+          expiresAt,
         },
         include: {
           baseCurrency: true,

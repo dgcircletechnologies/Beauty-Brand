@@ -23,7 +23,7 @@ export class CreateExchangeRateDto {
   @IsNumber({
     maxDecimalPlaces: 8,
   })
-  @Min(0)
+  @Min(0.00000001)
   rate!: number;
 
   @IsString()
