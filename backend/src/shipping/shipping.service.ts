@@ -119,7 +119,8 @@ export class ShippingService {
         zone: null,
         activeRateCount: 0,
         rates: [],
-        message: 'This address country is not assigned to an active shipping zone.',
+        message:
+          'This address country is not assigned to an active shipping zone.',
       };
     }
 
@@ -261,6 +262,8 @@ export class ShippingService {
   }
 
   async createRate(dto: CreateShippingRateDto) {
+    this.validateRateRanges(dto);
+
     await Promise.all([
       this.ensureZoneExists(dto.zoneId),
       this.currencyService.ensureActiveCurrency(dto.currencyCode),
@@ -285,6 +288,7 @@ export class ShippingService {
 
   async updateRate(rateId: string, dto: UpdateShippingRateDto) {
     await this.ensureRateExists(rateId);
+    this.validateRateRanges(dto);
 
     if (dto.zoneId) {
       await this.ensureZoneExists(dto.zoneId);
@@ -422,7 +426,9 @@ export class ShippingService {
     return rate;
   }
 
-  async toBaseAmount(rate: Pick<ShippingRateWithZone, 'amount' | 'currencyCode'>) {
+  async toBaseAmount(
+    rate: Pick<ShippingRateWithZone, 'amount' | 'currencyCode'>,
+  ) {
     const baseCurrency = await this.currencyService.getBaseCurrency();
     const amount = Number(rate.amount);
 
@@ -512,6 +518,38 @@ export class ShippingService {
   private nullableTrim(value?: string | null): string | null {
     const trimmed = value?.trim();
     return trimmed || null;
+  }
+
+  private validateRateRanges(
+    dto: Pick<
+      CreateShippingRateDto | UpdateShippingRateDto,
+      | 'minOrderAmount'
+      | 'maxOrderAmount'
+      | 'estimatedDaysMin'
+      | 'estimatedDaysMax'
+    >,
+  ) {
+    if (
+      dto.minOrderAmount !== undefined &&
+      dto.minOrderAmount !== null &&
+      dto.maxOrderAmount !== undefined &&
+      dto.maxOrderAmount !== null &&
+      dto.minOrderAmount > dto.maxOrderAmount
+    ) {
+      throw new BadRequestException(
+        'Min order amount cannot be greater than max order amount',
+      );
+    }
+
+    if (
+      dto.estimatedDaysMin !== undefined &&
+      dto.estimatedDaysMax !== undefined &&
+      dto.estimatedDaysMin > dto.estimatedDaysMax
+    ) {
+      throw new BadRequestException(
+        'Min delivery days cannot be greater than max delivery days',
+      );
+    }
   }
 
   private handleUniqueError(error: unknown, message: string): void {

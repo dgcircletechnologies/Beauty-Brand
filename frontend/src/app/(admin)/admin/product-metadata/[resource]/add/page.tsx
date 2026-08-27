@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  FormEvent,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -17,6 +24,34 @@ import {
   getProductMetadataConfig,
   productMetadataConfigs,
 } from "@/lib/product-metadata/config";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
+
+type MetadataForm = {
+  name: string;
+  slug: string;
+  description: string;
+  isActive: boolean;
+  inciName: string;
+  benefits: string;
+  warnings: string;
+  minAge: string;
+  maxAge: string;
+};
+
+const initialForm: MetadataForm = {
+  name: "",
+  slug: "",
+  description: "",
+  isActive: true,
+  inciName: "",
+  benefits: "",
+  warnings: "",
+  minAge: "",
+  maxAge: "",
+};
+
+const pageSize = 8;
+const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export default function AddProductMetadataPage() {
   const router = useRouter();
@@ -27,47 +62,17 @@ export default function AddProductMetadataPage() {
   const [items, setItems] = useState<AdminProductMetadataItem[]>([]);
   const [editingItem, setEditingItem] =
     useState<AdminProductMetadataItem | null>(null);
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [description, setDescription] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [inciName, setInciName] = useState("");
-  const [benefits, setBenefits] = useState("");
-  const [warnings, setWarnings] = useState("");
-  const [minAge, setMinAge] = useState("");
-  const [maxAge, setMaxAge] = useState("");
+  const [form, setForm] = useState(initialForm);
+  const [slugWasEdited, setSlugWasEdited] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
-
-  const loadItems = useCallback(async (showLoading = true) => {
-    if (!accessToken) {
-      return;
-    }
-
-    if (showLoading) {
-      setError(null);
-      setIsLoading(true);
-    }
-
-    try {
-      const nextItems = await getProductMetadataItems(
-        accessToken,
-        metadataConfig.resource,
-      );
-      setItems(nextItems);
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : `Unable to load ${metadataConfig.pluralLabel.toLowerCase()}`,
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [accessToken, metadataConfig]);
+  const debouncedSlug = useDebouncedValue(form.slug, 350);
+  const debouncedSearch = useDebouncedValue(search, 250);
 
   useEffect(() => {
     if (!accessToken) {
@@ -75,179 +80,311 @@ export default function AddProductMetadataPage() {
     }
 
     let isMounted = true;
+    const token = accessToken;
+    const resource = metadataConfig.resource;
+    const pluralLabel = metadataConfig.pluralLabel;
 
-    getProductMetadataItems(accessToken, metadataConfig.resource)
-      .then((nextItems) => {
+    async function loadItems() {
+      setError(null);
+      setIsLoading(true);
+
+      try {
+        const nextItems = await getProductMetadataItems(token, resource);
+
         if (isMounted) {
           setItems(nextItems);
+          setPage(1);
         }
-      })
-      .catch((caughtError) => {
+      } catch (caughtError) {
         if (isMounted) {
           setError(
             caughtError instanceof Error
               ? caughtError.message
-              : `Unable to load ${metadataConfig.pluralLabel.toLowerCase()}`,
+              : `Unable to load ${pluralLabel.toLowerCase()}`,
           );
         }
-      })
-      .finally(() => {
+      } finally {
         if (isMounted) {
           setIsLoading(false);
         }
-      });
+      }
+    }
+
+    void loadItems();
 
     return () => {
       isMounted = false;
     };
-  }, [accessToken, metadataConfig]);
+  }, [
+    accessToken,
+    metadataConfig.pluralLabel,
+    metadataConfig.resource,
+  ]);
+
+  const isEditing = Boolean(editingItem);
+  const normalizedSlug = form.slug.trim();
+  const debouncedNormalizedSlug = debouncedSlug.trim();
+  const slugIsValid = slugPattern.test(normalizedSlug);
+  const slugStatus = useMemo(() => {
+    if (
+      isEditing ||
+      !debouncedNormalizedSlug ||
+      debouncedNormalizedSlug !== normalizedSlug ||
+      !slugPattern.test(debouncedNormalizedSlug)
+    ) {
+      return null;
+    }
+
+    return items.some((item) => item.slug === debouncedNormalizedSlug)
+      ? "unavailable"
+      : "available";
+  }, [debouncedNormalizedSlug, isEditing, items, normalizedSlug]);
+
+  const filteredItems = useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+
+    if (!query) {
+      return items;
+    }
+
+    return items.filter((item) =>
+      [
+        item.name,
+        item.slug,
+        item.description,
+        item.inciName,
+        item.benefits,
+        item.warnings,
+      ]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(query)),
+    );
+  }, [debouncedSearch, items]);
+  const activeCount = useMemo(
+    () => items.filter((item) => item.isActive).length,
+    [items],
+  );
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visibleItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+
+    return filteredItems.slice(startIndex, startIndex + pageSize);
+  }, [currentPage, filteredItems]);
+  const ageValidationMessage = useMemo(() => {
+    if (metadataConfig.resource !== "age-groups") {
+      return null;
+    }
+
+    const minAge = optionalNumber(form.minAge);
+    const maxAge = optionalNumber(form.maxAge);
+
+    if (minAge !== null && maxAge !== null && minAge > maxAge) {
+      return "Min age cannot be greater than max age.";
+    }
+
+    return null;
+  }, [form.maxAge, form.minAge, metadataConfig.resource]);
+  const canSubmit =
+    Boolean(form.name.trim()) &&
+    slugIsValid &&
+    (isEditing || slugStatus === "available") &&
+    !ageValidationMessage &&
+    !isSubmitting;
+
+  const setField = useCallback(
+    <T extends keyof MetadataForm>(field: T, value: MetadataForm[T]) => {
+      setForm((currentForm) => ({
+        ...currentForm,
+        [field]: value,
+      }));
+      setSuccess(null);
+    },
+    [],
+  );
+
+  const handleNameChange = useCallback(
+    (nextName: string) => {
+      setForm((currentForm) => ({
+        ...currentForm,
+        name: nextName,
+        slug:
+          isEditing || slugWasEdited ? currentForm.slug : toSlug(nextName),
+      }));
+      setSuccess(null);
+    },
+    [isEditing, slugWasEdited],
+  );
+
+  const handleSlugChange = useCallback((nextSlug: string) => {
+    setForm((currentForm) => ({
+      ...currentForm,
+      slug: toSlug(nextSlug),
+    }));
+    setSlugWasEdited(true);
+    setSuccess(null);
+  }, []);
+
+  const resetForm = useCallback(() => {
+    setEditingItem(null);
+    setForm(initialForm);
+    setSlugWasEdited(false);
+  }, []);
+
+  const startEditing = useCallback((item: AdminProductMetadataItem) => {
+    setEditingItem(item);
+    setForm({
+      name: item.name,
+      slug: item.slug,
+      description: item.description ?? "",
+      isActive: item.isActive,
+      inciName: item.inciName ?? "",
+      benefits: item.benefits ?? "",
+      warnings: item.warnings ?? "",
+      minAge:
+        item.minAge === null || item.minAge === undefined
+          ? ""
+          : String(item.minAge),
+      maxAge:
+        item.maxAge === null || item.maxAge === undefined
+          ? ""
+          : String(item.maxAge),
+    });
+    setSlugWasEdited(true);
+    setError(null);
+    setSuccess(null);
+  }, []);
+
+  const getPayload = useCallback(
+    (): CreateProductMetadataPayload => ({
+      name: form.name.trim(),
+      slug: normalizedSlug,
+      description: form.description.trim() || undefined,
+      isActive: form.isActive,
+      ...(metadataConfig.resource === "ingredients" && {
+        inciName: form.inciName.trim() || undefined,
+        benefits: form.benefits.trim() || undefined,
+        warnings: form.warnings.trim() || undefined,
+      }),
+      ...(metadataConfig.resource === "age-groups" && {
+        minAge: form.minAge ? Number(form.minAge) : null,
+        maxAge: form.maxAge ? Number(form.maxAge) : null,
+      }),
+    }),
+    [form, metadataConfig.resource, normalizedSlug],
+  );
+
+  const handleSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      if (!accessToken || !canSubmit) {
+        return;
+      }
+
+      setError(null);
+      setSuccess(null);
+      setIsSubmitting(true);
+
+      try {
+        if (editingItem) {
+          const updatedItem = await updateProductMetadataItem(
+            accessToken,
+            metadataConfig.resource,
+            editingItem.id,
+            getPayload(),
+          );
+          setItems((currentItems) =>
+            currentItems.map((item) =>
+              item.id === updatedItem.id ? updatedItem : item,
+            ),
+          );
+          setSuccess(`${metadataConfig.singularLabel} updated successfully`);
+        } else {
+          const createdItem = await createProductMetadataItem(
+            accessToken,
+            metadataConfig.resource,
+            getPayload(),
+          );
+          setItems((currentItems) => [createdItem, ...currentItems]);
+          setSuccess(`${metadataConfig.singularLabel} created successfully`);
+        }
+
+        resetForm();
+        setPage(1);
+      } catch (caughtError) {
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : `Unable to save ${metadataConfig.singularLabel.toLowerCase()}`,
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [
+      accessToken,
+      canSubmit,
+      editingItem,
+      getPayload,
+      metadataConfig.resource,
+      metadataConfig.singularLabel,
+      resetForm,
+    ],
+  );
+
+  const handleDelete = useCallback(
+    async (item: AdminProductMetadataItem) => {
+      if (!accessToken) {
+        return;
+      }
+
+      const shouldDelete = window.confirm(`Delete ${item.name}?`);
+
+      if (!shouldDelete) {
+        return;
+      }
+
+      setError(null);
+      setSuccess(null);
+      setDeletingItemId(item.id);
+
+      try {
+        await deleteProductMetadataItem(
+          accessToken,
+          metadataConfig.resource,
+          item.id,
+        );
+        setItems((currentItems) =>
+          currentItems.filter((currentItem) => currentItem.id !== item.id),
+        );
+        setSuccess(`${metadataConfig.singularLabel} deleted successfully`);
+
+        if (editingItem?.id === item.id) {
+          resetForm();
+        }
+      } catch (caughtError) {
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : `Unable to delete ${metadataConfig.singularLabel.toLowerCase()}`,
+        );
+      } finally {
+        setDeletingItemId(null);
+      }
+    },
+    [
+      accessToken,
+      editingItem,
+      metadataConfig.resource,
+      metadataConfig.singularLabel,
+      resetForm,
+    ],
+  );
 
   if (!config) {
     notFound();
     return null;
-  }
-
-  function handleNameChange(nextName: string) {
-    setName(nextName);
-
-    if (!slug) {
-      setSlug(toSlug(nextName));
-    }
-  }
-
-  function resetForm() {
-    setEditingItem(null);
-    setName("");
-    setSlug("");
-    setDescription("");
-    setInciName("");
-    setBenefits("");
-    setWarnings("");
-    setMinAge("");
-    setMaxAge("");
-    setIsActive(true);
-  }
-
-  function startEditing(item: AdminProductMetadataItem) {
-    setEditingItem(item);
-    setName(item.name);
-    setSlug(item.slug);
-    setDescription(item.description ?? "");
-    setIsActive(item.isActive);
-    setInciName(item.inciName ?? "");
-    setBenefits(item.benefits ?? "");
-    setWarnings(item.warnings ?? "");
-    setMinAge(
-      item.minAge === null || item.minAge === undefined
-        ? ""
-        : String(item.minAge),
-    );
-    setMaxAge(
-      item.maxAge === null || item.maxAge === undefined
-        ? ""
-        : String(item.maxAge),
-    );
-    setError(null);
-    setSuccess(null);
-  }
-
-  function getPayload(): CreateProductMetadataPayload {
-    return {
-      name,
-      slug,
-      description: description || undefined,
-      isActive,
-      ...(metadataConfig.resource === "ingredients" && {
-        inciName: inciName || undefined,
-        benefits: benefits || undefined,
-        warnings: warnings || undefined,
-      }),
-      ...(metadataConfig.resource === "age-groups" && {
-        minAge: minAge ? Number(minAge) : null,
-        maxAge: maxAge ? Number(maxAge) : null,
-      }),
-    };
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!accessToken) {
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-    setIsSubmitting(true);
-
-    try {
-      if (editingItem) {
-        await updateProductMetadataItem(
-          accessToken,
-          metadataConfig.resource,
-          editingItem.id,
-          getPayload(),
-        );
-        setSuccess(`${metadataConfig.singularLabel} updated successfully`);
-      } else {
-        await createProductMetadataItem(
-          accessToken,
-          metadataConfig.resource,
-          getPayload(),
-        );
-        setSuccess(`${metadataConfig.singularLabel} created successfully`);
-      }
-
-      resetForm();
-      await loadItems();
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : `Unable to save ${metadataConfig.singularLabel.toLowerCase()}`,
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleDelete(item: AdminProductMetadataItem) {
-    if (!accessToken) {
-      return;
-    }
-
-    const shouldDelete = window.confirm(`Delete ${item.name}?`);
-
-    if (!shouldDelete) {
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-    setDeletingItemId(item.id);
-
-    try {
-      await deleteProductMetadataItem(
-        accessToken,
-        metadataConfig.resource,
-        item.id,
-      );
-      setSuccess(`${metadataConfig.singularLabel} deleted successfully`);
-
-      if (editingItem?.id === item.id) {
-        resetForm();
-      }
-
-      await loadItems();
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : `Unable to delete ${metadataConfig.singularLabel.toLowerCase()}`,
-      );
-    } finally {
-      setDeletingItemId(null);
-    }
   }
 
   return (
@@ -256,7 +393,7 @@ export default function AddProductMetadataPage() {
         <div>
           <p className="eyebrow">Product Metadata</p>
           <h1>
-            {editingItem ? "Edit" : "Add"} {metadataConfig.singularLabel}
+            {isEditing ? "Edit" : "Add"} {metadataConfig.singularLabel}
           </h1>
           <p>{metadataConfig.description}</p>
         </div>
@@ -268,23 +405,47 @@ export default function AddProductMetadataPage() {
       <section className="metadata-manage-grid">
         <div className="form-surface">
           <form className="admin-form" onSubmit={handleSubmit}>
+            <div className="section-title">
+              <h2>{isEditing ? "Edit Record" : "Create Record"}</h2>
+              <span>{activeCount} active</span>
+            </div>
             <div className="split-fields">
               <label>
                 Name
                 <input
-                  value={name}
-                  onChange={(event) => handleNameChange(event.target.value)}
                   required
+                  value={form.name}
+                  onChange={(event) => handleNameChange(event.target.value)}
                 />
               </label>
               <label>
                 Slug
                 <input
-                  value={slug}
-                  onChange={(event) => setSlug(toSlug(event.target.value))}
                   pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  readOnly={isEditing}
                   required
+                  value={form.slug}
+                  onChange={(event) => handleSlugChange(event.target.value)}
                 />
+                {normalizedSlug ? (
+                  <small
+                    className={
+                      slugStatus === "available" || isEditing
+                        ? "field-status available"
+                        : "field-status unavailable"
+                    }
+                  >
+                    {isEditing
+                      ? "Slug is locked while editing."
+                      : !slugIsValid
+                        ? "Use lowercase words separated by hyphens."
+                        : slugStatus === "available"
+                          ? "Slug is available."
+                          : slugStatus === "unavailable"
+                            ? "Slug already exists."
+                            : "Checking slug..."}
+                  </small>
+                ) : null}
               </label>
             </div>
 
@@ -295,8 +456,10 @@ export default function AddProductMetadataPage() {
                   <input
                     min={0}
                     type="number"
-                    value={minAge}
-                    onChange={(event) => setMinAge(event.target.value)}
+                    value={form.minAge}
+                    onChange={(event) =>
+                      setField("minAge", event.target.value)
+                    }
                   />
                 </label>
                 <label>
@@ -304,8 +467,10 @@ export default function AddProductMetadataPage() {
                   <input
                     min={0}
                     type="number"
-                    value={maxAge}
-                    onChange={(event) => setMaxAge(event.target.value)}
+                    value={form.maxAge}
+                    onChange={(event) =>
+                      setField("maxAge", event.target.value)
+                    }
                   />
                 </label>
               </div>
@@ -316,24 +481,30 @@ export default function AddProductMetadataPage() {
                 <label>
                   INCI name
                   <input
-                    value={inciName}
-                    onChange={(event) => setInciName(event.target.value)}
+                    value={form.inciName}
+                    onChange={(event) =>
+                      setField("inciName", event.target.value)
+                    }
                   />
                 </label>
                 <label>
                   Benefits
                   <textarea
                     rows={3}
-                    value={benefits}
-                    onChange={(event) => setBenefits(event.target.value)}
+                    value={form.benefits}
+                    onChange={(event) =>
+                      setField("benefits", event.target.value)
+                    }
                   />
                 </label>
                 <label>
                   Warnings
                   <textarea
                     rows={3}
-                    value={warnings}
-                    onChange={(event) => setWarnings(event.target.value)}
+                    value={form.warnings}
+                    onChange={(event) =>
+                      setField("warnings", event.target.value)
+                    }
                   />
                 </label>
               </>
@@ -343,32 +514,40 @@ export default function AddProductMetadataPage() {
               Description
               <textarea
                 rows={4}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
+                value={form.description}
+                onChange={(event) =>
+                  setField("description", event.target.value)
+                }
               />
             </label>
 
-            <label className="checkbox-field">
-              <input
-                checked={isActive}
-                type="checkbox"
-                onChange={(event) => setIsActive(event.target.checked)}
+            <div className="metadata-status-row">
+              <span>Active</span>
+              <StatusSwitch
+                checked={form.isActive}
+                disabled={isSubmitting}
+                label={`${form.isActive ? "Deactivate" : "Activate"} ${
+                  metadataConfig.singularLabel
+                }`}
+                onChange={() => setField("isActive", !form.isActive)}
               />
-              Active
-            </label>
+            </div>
 
+            {ageValidationMessage ? (
+              <p className="form-error">{ageValidationMessage}</p>
+            ) : null}
             {success ? <p className="form-success">{success}</p> : null}
             {error ? <p className="form-error">{error}</p> : null}
 
             <div className="form-actions">
               <button
                 className="primary-button"
+                disabled={!canSubmit}
                 type="submit"
-                disabled={isSubmitting}
               >
                 {isSubmitting
                   ? "Saving..."
-                  : `${editingItem ? "Update" : "Create"} ${
+                  : `${isEditing ? "Update" : "Create"} ${
                       metadataConfig.singularLabel
                     }`}
               </button>
@@ -394,65 +573,188 @@ export default function AddProductMetadataPage() {
           <div className="section-title">
             <div>
               <h2>Existing {metadataConfig.pluralLabel}</h2>
-              <p>{items.length} saved records</p>
+              <p>
+                {filteredItems.length} shown from {items.length} saved records
+              </p>
             </div>
           </div>
+          <input
+            aria-label={`Search ${metadataConfig.pluralLabel}`}
+            className="metadata-search-input"
+            placeholder={`Search ${metadataConfig.pluralLabel.toLowerCase()}`}
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+          />
 
           {isLoading ? <p className="muted-text">Loading...</p> : null}
 
-          {!isLoading && items.length === 0 ? (
-            <p className="muted-text">No records yet.</p>
+          {!isLoading && filteredItems.length === 0 ? (
+            <p className="muted-text">No matching records.</p>
           ) : null}
 
           <div className="metadata-list">
-            {items.map((item) => (
-              <article className="metadata-list-row" key={item.id}>
-                <div>
-                  <h3>{item.name}</h3>
-                  <p>{item.slug}</p>
-                  {item.description ? <p>{item.description}</p> : null}
-                  {metadataConfig.resource === "ingredients" ? (
-                    <small>
-                      {[item.inciName, item.benefits, item.warnings]
-                        .filter(Boolean)
-                        .join(" / ")}
-                    </small>
-                  ) : null}
-                  {metadataConfig.resource === "age-groups" ? (
-                    <small>
-                      {formatAge(item.minAge)} - {formatAge(item.maxAge)}
-                    </small>
-                  ) : null}
-                </div>
-                <span>{item.isActive ? "Active" : "Inactive"}</span>
-                <div className="metadata-row-actions">
-                  <button
-                    aria-label={`Edit ${item.name}`}
-                    className="icon-button"
-                    title={`Edit ${item.name}`}
-                    type="button"
-                    onClick={() => startEditing(item)}
-                  >
-                    <EditIcon />
-                  </button>
-                  <button
-                    aria-label={`Delete ${item.name}`}
-                    className="icon-button danger-icon-button"
-                    title={`Delete ${item.name}`}
-                    type="button"
-                    disabled={deletingItemId === item.id}
-                    onClick={() => void handleDelete(item)}
-                  >
-                    <TrashIcon />
-                  </button>
-                </div>
-              </article>
+            {visibleItems.map((item) => (
+              <MetadataListRow
+                deleting={deletingItemId === item.id}
+                item={item}
+                key={item.id}
+                resource={metadataConfig.resource}
+                onDelete={handleDelete}
+                onEdit={startEditing}
+              />
             ))}
           </div>
+
+          <PaginationControls
+            currentPage={currentPage}
+            disabled={isSubmitting}
+            totalPages={totalPages}
+            onNext={() => setPage((current) => current + 1)}
+            onPrevious={() => setPage((current) => Math.max(current - 1, 1))}
+          />
         </aside>
       </section>
     </main>
   );
+}
+
+type MetadataListRowProps = {
+  deleting: boolean;
+  item: AdminProductMetadataItem;
+  resource: string;
+  onDelete: (item: AdminProductMetadataItem) => void;
+  onEdit: (item: AdminProductMetadataItem) => void;
+};
+
+const MetadataListRow = memo(function MetadataListRow({
+  deleting,
+  item,
+  resource,
+  onDelete,
+  onEdit,
+}: MetadataListRowProps) {
+  return (
+    <article className="metadata-list-row">
+      <div>
+        <h3>{item.name}</h3>
+        <p>{item.slug}</p>
+        {item.description ? <p>{item.description}</p> : null}
+        {resource === "ingredients" ? (
+          <small>
+            {[item.inciName, item.benefits, item.warnings]
+              .filter(Boolean)
+              .join(" / ")}
+          </small>
+        ) : null}
+        {resource === "age-groups" ? (
+          <small>
+            {formatAge(item.minAge)} - {formatAge(item.maxAge)}
+          </small>
+        ) : null}
+      </div>
+      <span>{item.isActive ? "Active" : "Inactive"}</span>
+      <div className="metadata-row-actions">
+        <button
+          aria-label={`Edit ${item.name}`}
+          className="icon-button"
+          title={`Edit ${item.name}`}
+          type="button"
+          onClick={() => onEdit(item)}
+        >
+          <EditIcon />
+        </button>
+        <button
+          aria-label={`Delete ${item.name}`}
+          className="icon-button danger-icon-button"
+          disabled={deleting}
+          title={`Delete ${item.name}`}
+          type="button"
+          onClick={() => onDelete(item)}
+        >
+          <TrashIcon />
+        </button>
+      </div>
+    </article>
+  );
+});
+
+type StatusSwitchProps = {
+  checked: boolean;
+  disabled: boolean;
+  label: string;
+  onChange: () => void;
+};
+
+const StatusSwitch = memo(function StatusSwitch({
+  checked,
+  disabled,
+  label,
+  onChange,
+}: StatusSwitchProps) {
+  return (
+    <label className="status-switch" aria-label={label} title={label}>
+      <input
+        checked={checked}
+        disabled={disabled}
+        type="checkbox"
+        onChange={onChange}
+      />
+      <span />
+    </label>
+  );
+});
+
+type PaginationControlsProps = {
+  currentPage: number;
+  disabled: boolean;
+  totalPages: number;
+  onNext: () => void;
+  onPrevious: () => void;
+};
+
+const PaginationControls = memo(function PaginationControls({
+  currentPage,
+  disabled,
+  totalPages,
+  onNext,
+  onPrevious,
+}: PaginationControlsProps) {
+  return (
+    <div className="pagination-actions">
+      <button
+        className="secondary-button compact-button"
+        disabled={disabled || currentPage <= 1}
+        type="button"
+        onClick={onPrevious}
+      >
+        Previous
+      </button>
+      <span>
+        Page {currentPage} of {totalPages}
+      </span>
+      <button
+        className="secondary-button compact-button"
+        disabled={disabled || currentPage >= totalPages}
+        type="button"
+        onClick={onNext}
+      >
+        Next
+      </button>
+    </div>
+  );
+});
+
+function optionalNumber(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : -1;
 }
 
 function formatAge(value: number | null | undefined) {

@@ -1485,6 +1485,13 @@ export function updateAdminShippingZone(
   });
 }
 
+export function deleteAdminShippingZone(accessToken: string, zoneId: string) {
+  return apiRequest<AdminShippingZone>(`/admin/shipping/zones/${zoneId}`, {
+    method: "DELETE",
+    headers: withAuth(accessToken),
+  });
+}
+
 export function addAdminZoneCountry(
   accessToken: string,
   zoneId: string,
@@ -1512,6 +1519,13 @@ export function updateAdminZoneCountry(
   });
 }
 
+export function deleteAdminZoneCountry(accessToken: string, countryId: string) {
+  return apiRequest<AdminZoneCountry>(`/admin/shipping/countries/${countryId}`, {
+    method: "DELETE",
+    headers: withAuth(accessToken),
+  });
+}
+
 export function createAdminShippingRate(
   accessToken: string,
   payload: {
@@ -1521,8 +1535,8 @@ export function createAdminShippingRate(
     calculation?: "FLAT" | "FREE";
     amount: number;
     currencyCode: string;
-    minOrderAmount?: number;
-    maxOrderAmount?: number;
+    minOrderAmount?: number | null;
+    maxOrderAmount?: number | null;
     estimatedDaysMin?: number;
     estimatedDaysMax?: number;
     isActive?: boolean;
@@ -1556,6 +1570,13 @@ export function updateAdminShippingRate(
     method: "PATCH",
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAdminShippingRate(accessToken: string, rateId: string) {
+  return apiRequest<AdminShippingRate>(`/admin/shipping/rates/${rateId}`, {
+    method: "DELETE",
+    headers: withAuth(accessToken),
   });
 }
 

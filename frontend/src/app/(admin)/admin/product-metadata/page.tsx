@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -65,6 +65,33 @@ export default function ProductMetadataPage() {
     };
   }, [accessToken]);
 
+  const metadataStats = useMemo(
+    () =>
+      productMetadataConfigs.map((config) => {
+        const items = metadata[config.resource] ?? [];
+        const activeCount = items.filter((item) => item.isActive).length;
+
+        return {
+          ...config,
+          activeCount,
+          count: items.length,
+          latestItem: items[0] ?? null,
+        };
+      }),
+    [metadata],
+  );
+  const totalRecords = useMemo(
+    () => metadataStats.reduce((total, stat) => total + stat.count, 0),
+    [metadataStats],
+  );
+  const totalActiveRecords = useMemo(
+    () => metadataStats.reduce((total, stat) => total + stat.activeCount, 0),
+    [metadataStats],
+  );
+  const completionPercent = totalRecords
+    ? Math.round((totalActiveRecords / totalRecords) * 100)
+    : 0;
+
   return (
     <main>
       <section className="dashboard-header">
@@ -77,26 +104,46 @@ export default function ProductMetadataPage() {
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      <section className="metadata-overview-grid">
-        {productMetadataConfigs.map((config) => {
-          const items = metadata[config.resource] ?? [];
+      <section className="metadata-hero-panel">
+        <div>
+          <p className="eyebrow">Metadata Health</p>
+          <h2>{isLoading ? "Loading..." : `${completionPercent}%`}</h2>
+          <p>
+            {totalActiveRecords} active records across {metadataStats.length}
+            {" product metadata groups."}
+          </p>
+        </div>
+        <div className="currency-coverage">
+          <span>{totalRecords}</span>
+          <div>
+            <i style={{ width: `${completionPercent}%` }} />
+          </div>
+          <small>total saved records</small>
+        </div>
+      </section>
 
-          return (
-            <article className="metadata-overview-card" key={config.resource}>
-              <div>
-                <h2>{config.pluralLabel}</h2>
-                <p>{config.description}</p>
-              </div>
-              <strong>{isLoading ? "..." : items.length}</strong>
-              <Link
-                className="secondary-link-button"
-                href={`/admin/product-metadata/${config.resource}/add`}
-              >
-                Add {config.singularLabel}
-              </Link>
-            </article>
-          );
-        })}
+      <section className="metadata-overview-grid">
+        {metadataStats.map((config) => (
+          <article className="metadata-overview-card" key={config.resource}>
+            <div>
+              <span>{config.activeCount} active</span>
+              <h2>{config.pluralLabel}</h2>
+              <p>{config.description}</p>
+              {config.latestItem ? (
+                <small>Latest: {config.latestItem.name}</small>
+              ) : (
+                <small>No records yet</small>
+              )}
+            </div>
+            <strong>{isLoading ? "..." : config.count}</strong>
+            <Link
+              className="secondary-link-button"
+              href={`/admin/product-metadata/${config.resource}/add`}
+            >
+              Manage {config.pluralLabel}
+            </Link>
+          </article>
+        ))}
       </section>
     </main>
   );
