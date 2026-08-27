@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
@@ -30,6 +31,15 @@ export class AdminProductVariantController {
   @ResponseMessage('Product variants fetched successfully')
   findByProduct(@Param('productId') productId: string) {
     return this.productVariantService.findByProduct(productId);
+  }
+
+  @Get('sku-availability/:sku')
+  @ResponseMessage('Product variant SKU availability checked successfully')
+  checkSkuAvailability(
+    @Param('sku') sku: string,
+    @Query('excludeId') excludeId?: string,
+  ) {
+    return this.productVariantService.checkSkuAvailability(sku, excludeId);
   }
 
   @Get(':variantId')

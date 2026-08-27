@@ -1,21 +1,6 @@
-import {
-  IsBoolean,
-  IsInt,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class UpdateProductVariantDto {
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(120)
-  sku?: string;
-
   @IsOptional()
   @IsNumber({
     maxDecimalPlaces: 2,

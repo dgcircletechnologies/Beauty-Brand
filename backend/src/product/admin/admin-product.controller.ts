@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
@@ -22,6 +23,15 @@ export class AdminProductController {
   @ResponseMessage('Product metadata fetched successfully')
   findProductMetadata() {
     return this.productService.findProductMetadata();
+  }
+
+  @Get('slug-availability/:slug')
+  @ResponseMessage('Product slug availability checked successfully')
+  checkSlugAvailability(
+    @Param('slug') slug: string,
+    @Query('excludeId') excludeId?: string,
+  ) {
+    return this.productService.checkSlugAvailability(slug, excludeId);
   }
 
   @Post()

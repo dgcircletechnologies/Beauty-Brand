@@ -96,6 +96,51 @@ export type CreateAdminProductVariantPayload = {
   isActive?: boolean;
 };
 
+export type UpdateAdminProductPayload = {
+  name?: string;
+  shortDescription?: string;
+  description?: string;
+  usageInstructions?: string;
+  warnings?: string;
+  status?: AdminProduct["status"];
+  isFeatured?: boolean;
+  ingredientIds?: string[];
+  audienceIds?: string[];
+  skinTypeIds?: string[];
+  ageGroupIds?: string[];
+  hairProfileIds?: string[];
+  concernIds?: string[];
+  benefitIds?: string[];
+};
+
+export type UpdateAdminProductVariantPayload = {
+  price?: number;
+  compareAtPrice?: number | null;
+  stockQuantity?: number;
+  isActive?: boolean;
+};
+
+export type AdminProductSlugAvailability = {
+  slug: string;
+  available: boolean;
+  product: {
+    id: string;
+    name: string;
+    deletedAt: string | null;
+  } | null;
+};
+
+export type AdminVariantSkuAvailability = {
+  sku: string;
+  available: boolean;
+  variant: {
+    id: string;
+    sku: string;
+    productId: string;
+    deletedAt: string | null;
+  } | null;
+};
+
 export type AdminProductDetail = AdminProduct & {
   description: string | null;
   usageInstructions: string | null;
@@ -593,8 +638,56 @@ export function createAdminProduct(
   });
 }
 
+export function checkAdminProductSlugAvailability(
+  accessToken: string,
+  slug: string,
+  excludeId?: string,
+) {
+  const params = excludeId
+    ? `?excludeId=${encodeURIComponent(excludeId)}`
+    : "";
+
+  return apiRequest<AdminProductSlugAvailability>(
+    `/admin/products/slug-availability/${encodeURIComponent(slug)}${params}`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
 export function getAdminProduct(accessToken: string, productId: string) {
   return apiRequest<AdminProductDetail>(`/admin/products/${productId}`, {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function updateAdminProduct(
+  accessToken: string,
+  productId: string,
+  payload: UpdateAdminProductPayload,
+) {
+  return apiRequest<AdminProductDetail>(`/admin/products/${productId}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminProductStatus(
+  accessToken: string,
+  productId: string,
+  status: AdminProduct["status"],
+) {
+  return apiRequest<AdminProduct>(`/admin/products/${productId}/status`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function deleteAdminProduct(accessToken: string, productId: string) {
+  return apiRequest<AdminProduct>(`/admin/products/${productId}`, {
+    method: "DELETE",
     headers: withAuth(accessToken),
   });
 }
@@ -610,6 +703,56 @@ export function createAdminProductVariant(
       method: "POST",
       headers: withAuth(accessToken),
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateAdminProductVariant(
+  accessToken: string,
+  productId: string,
+  variantId: string,
+  payload: UpdateAdminProductVariantPayload,
+) {
+  return apiRequest<AdminProductVariant>(
+    `/admin/products/${productId}/variants/${variantId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminProductVariant(
+  accessToken: string,
+  productId: string,
+  variantId: string,
+) {
+  return apiRequest<AdminProductVariant>(
+    `/admin/products/${productId}/variants/${variantId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function checkAdminVariantSkuAvailability(
+  accessToken: string,
+  productId: string,
+  sku: string,
+  excludeId?: string,
+) {
+  const params = excludeId
+    ? `?excludeId=${encodeURIComponent(excludeId)}`
+    : "";
+
+  return apiRequest<AdminVariantSkuAvailability>(
+    `/admin/products/${productId}/variants/sku-availability/${encodeURIComponent(
+      sku,
+    )}${params}`,
+    {
+      headers: withAuth(accessToken),
     },
   );
 }

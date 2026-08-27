@@ -1,23 +1,42 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 
-import type { CreateAdminProductVariantPayload } from "@/lib/api/admin";
+import type {
+  AdminVariantSkuAvailability,
+  CreateAdminProductVariantPayload,
+} from "@/lib/api/admin";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 
 export type ProductVariantFormPayload = CreateAdminProductVariantPayload & {
   imageFileKeys?: string[];
   imageFiles?: File[];
 };
 
+type VariantImageDraft = {
+  file: File;
+  key: string;
+  previewUrl: string;
+};
+
 type ProductVariantFormProps = {
   asForm?: boolean;
+  checkSkuAvailability?: (sku: string) => Promise<AdminVariantSkuAvailability>;
   imageOptions?: {
     key: string;
     label: string;
     previewUrl: string;
   }[];
   isSubmitting?: boolean;
+  reservedSkus?: string[];
   children?: ReactNode;
   onCancel?: () => void;
   onSubmit: (payload: ProductVariantFormPayload) => Promise<void> | void;
@@ -26,8 +45,10 @@ type ProductVariantFormProps = {
 
 export function ProductVariantForm({
   asForm = true,
+  checkSkuAvailability,
   imageOptions = [],
   isSubmitting = false,
+  reservedSkus = [],
   children,
   onCancel,
   onSubmit,
@@ -39,10 +60,93 @@ export function ProductVariantForm({
   const [stockQuantity, setStockQuantity] = useState("0");
   const [isActive, setIsActive] = useState(true);
   const [selectedImageKeys, setSelectedImageKeys] = useState<string[]>([]);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imageDrafts, setImageDrafts] = useState<VariantImageDraft[]>([]);
+  const [skuStatus, setSkuStatus] =
+    useState<AdminVariantSkuAvailability | null>(null);
+  const [isCheckingSku, setIsCheckingSku] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const imageDraftsRef = useRef<VariantImageDraft[]>([]);
+  const debouncedSku = useDebouncedValue(sku, 450);
+  const normalizedSku = sku.trim().toUpperCase();
+  const reservedSkuSet = useMemo(
+    () => new Set(reservedSkus.map((reservedSku) => reservedSku.toUpperCase())),
+    [reservedSkus],
+  );
+  const skuIsReserved = Boolean(normalizedSku && reservedSkuSet.has(normalizedSku));
 
-  async function submitVariant() {
+  useEffect(() => {
+    if (!checkSkuAvailability || !debouncedSku.trim() || skuIsReserved) {
+      return;
+    }
+
+    let isMounted = true;
+    const skuSnapshot = debouncedSku.trim().toUpperCase();
+    const checkSkuAvailabilitySnapshot = checkSkuAvailability;
+
+    async function checkSku() {
+      setIsCheckingSku(true);
+
+      try {
+        const nextStatus = await checkSkuAvailabilitySnapshot(skuSnapshot);
+
+        if (isMounted) {
+          setSkuStatus(nextStatus);
+        }
+      } catch {
+        if (isMounted) {
+          setSkuStatus(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsCheckingSku(false);
+        }
+      }
+    }
+
+    void checkSku();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [checkSkuAvailability, debouncedSku, skuIsReserved]);
+
+  useEffect(() => {
+    imageDraftsRef.current = imageDrafts;
+  }, [imageDrafts]);
+
+  useEffect(() => {
+    return () => {
+      imageDraftsRef.current.forEach((imageDraft) =>
+        URL.revokeObjectURL(imageDraft.previewUrl),
+      );
+    };
+  }, []);
+
+  const skuIsAvailable =
+    Boolean(normalizedSku) &&
+    !skuIsReserved &&
+    (!checkSkuAvailability ||
+      (skuStatus?.sku === normalizedSku && skuStatus.available));
+  const canSubmitVariant =
+    Boolean(normalizedSku) &&
+    Boolean(price) &&
+    skuIsAvailable &&
+    !isSubmitting &&
+    !isCheckingSku;
+
+  const removeImageDraft = useCallback((imageKey: string) => {
+    setImageDrafts((currentDrafts) => {
+      const imageDraft = currentDrafts.find((draft) => draft.key === imageKey);
+
+      if (imageDraft) {
+        URL.revokeObjectURL(imageDraft.previewUrl);
+      }
+
+      return currentDrafts.filter((draft) => draft.key !== imageKey);
+    });
+  }, []);
+
+  const submitVariant = useCallback(async () => {
     setError(null);
 
     if (!sku.trim()) {
@@ -55,6 +159,15 @@ export function ProductVariantForm({
       return;
     }
 
+    if (!skuIsAvailable) {
+      setError(
+        skuIsReserved
+          ? "This SKU is already added to another draft variant"
+          : "SKU is already in use",
+      );
+      return;
+    }
+
     await onSubmit({
       sku,
       price: Number(price),
@@ -62,17 +175,32 @@ export function ProductVariantForm({
       stockQuantity: stockQuantity ? Number(stockQuantity) : 0,
       isActive,
       imageFileKeys: selectedImageKeys,
-      imageFiles,
+      imageFiles: imageDrafts.map((imageDraft) => imageDraft.file),
     });
 
+    imageDrafts.forEach((imageDraft) =>
+      URL.revokeObjectURL(imageDraft.previewUrl),
+    );
     setSku("");
     setPrice("");
     setCompareAtPrice("");
     setStockQuantity("0");
     setIsActive(true);
     setSelectedImageKeys([]);
-    setImageFiles([]);
-  }
+    setImageDrafts([]);
+    setSkuStatus(null);
+  }, [
+    compareAtPrice,
+    imageDrafts,
+    isActive,
+    onSubmit,
+    price,
+    selectedImageKeys,
+    sku,
+    skuIsAvailable,
+    skuIsReserved,
+    stockQuantity,
+  ]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,6 +217,19 @@ export function ProductVariantForm({
             value={sku}
             onChange={(event) => setSku(event.target.value.toUpperCase())}
           />
+          {normalizedSku ? (
+            <small className={skuIsAvailable ? "form-success" : "form-error"}>
+              {skuIsReserved
+                ? "This SKU is already added to another draft variant."
+                : !checkSkuAvailability
+                  ? "SKU ready."
+                : isCheckingSku || skuStatus?.sku !== normalizedSku
+                  ? "Checking SKU..."
+                  : skuIsAvailable
+                    ? "SKU is available."
+                    : "SKU is already in use."}
+            </small>
+          ) : null}
         </label>
         <label>
           Price
@@ -137,7 +278,12 @@ export function ProductVariantForm({
       {imageOptions.length ? (
         <div className="variant-image-picker">
           {imageOptions.map((image) => (
-            <label key={image.key}>
+            <label
+              className={
+                selectedImageKeys.includes(image.key) ? "selected" : undefined
+              }
+              key={image.key}
+            >
               <input
                 checked={selectedImageKeys.includes(image.key)}
                 type="checkbox"
@@ -150,6 +296,7 @@ export function ProductVariantForm({
                 }
               />
               <img alt={image.label} src={image.previewUrl} />
+              <small>{image.label}</small>
             </label>
           ))}
         </div>
@@ -162,14 +309,37 @@ export function ProductVariantForm({
           multiple
           type="file"
           onChange={(event) => {
-            setImageFiles(Array.from(event.target.files ?? []));
+            const selectedFiles = Array.from(event.target.files ?? []);
+
+            setImageDrafts((currentDrafts) => [
+              ...currentDrafts,
+              ...selectedFiles.map((file) => ({
+                file,
+                key: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+                previewUrl: URL.createObjectURL(file),
+              })),
+            ]);
             event.target.value = "";
           }}
         />
       </label>
 
-      {imageFiles.length ? (
-        <p className="muted-text">{imageFiles.length} image(s) selected</p>
+      {imageDrafts.length ? (
+        <div className="product-image-grid">
+          {imageDrafts.map((imageDraft) => (
+            <article className="product-image-card" key={imageDraft.key}>
+              <img alt={imageDraft.file.name} src={imageDraft.previewUrl} />
+              <span>{imageDraft.file.name}</span>
+              <button
+                className="secondary-button compact-button"
+                type="button"
+                onClick={() => removeImageDraft(imageDraft.key)}
+              >
+                Remove
+              </button>
+            </article>
+          ))}
+        </div>
       ) : null}
 
       {children}
@@ -179,7 +349,7 @@ export function ProductVariantForm({
       <div className="form-actions">
         <button
           className="primary-button"
-          disabled={isSubmitting}
+          disabled={!canSubmitVariant}
           type={asForm ? "submit" : "button"}
           onClick={asForm ? undefined : () => void submitVariant()}
         >

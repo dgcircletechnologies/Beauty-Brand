@@ -3,26 +3,48 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { ProductStatus } from '../../generated/prisma/enums.cjs';
 import { PrismaService } from '../database/prisma.service';
+import { ProductMetadataService } from './product-metadata.service';
 import { ProductService } from './product.service';
 
 type ProductDelegateMock = {
   create: jest.Mock;
+  findUnique: jest.Mock;
   findFirst: jest.Mock;
   findMany: jest.Mock;
   update: jest.Mock;
 };
 
+type ProductVariantDelegateMock = {
+  updateMany: jest.Mock;
+};
+
 describe('ProductService', () => {
   let service: ProductService;
   let product: ProductDelegateMock;
+  let productVariant: ProductVariantDelegateMock;
 
   beforeEach(async () => {
     product = {
       create: jest.fn(),
+      findUnique: jest.fn(),
       findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
     };
+    productVariant = {
+      updateMany: jest.fn(),
+    };
+
+    const runTransaction = <T>(
+      callback: (tx: {
+        product: ProductDelegateMock;
+        productVariant: ProductVariantDelegateMock;
+      }) => T,
+    ) =>
+      callback({
+        product,
+        productVariant,
+      });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -31,6 +53,15 @@ describe('ProductService', () => {
           provide: PrismaService,
           useValue: {
             product,
+            productVariant,
+            $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+            $transaction: jest.fn(runTransaction),
+          },
+        },
+        {
+          provide: ProductMetadataService,
+          useValue: {
+            findAllMetadataOptions: jest.fn(),
           },
         },
       ],
@@ -50,7 +81,10 @@ describe('ProductService', () => {
 
     await expect(
       service.findPublicProductBySlug('daily-cleanser'),
-    ).resolves.toBe(expectedProduct);
+    ).resolves.toEqual({
+      ...expectedProduct,
+      images: [],
+    });
 
     expect(product.findFirst).toHaveBeenCalledWith({
       where: {
@@ -58,39 +92,7 @@ describe('ProductService', () => {
         deletedAt: null,
         status: ProductStatus.PUBLISHED,
       },
-      include: {
-        categories: {
-          include: {
-            category: true,
-          },
-          orderBy: [
-            {
-              isPrimary: 'desc',
-            },
-            {
-              sortOrder: 'asc',
-            },
-          ],
-        },
-        attributeValues: {
-          include: {
-            attribute: true,
-            option: true,
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-        variants: {
-          where: {
-            deletedAt: null,
-            isActive: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
-      },
+      include: getExpectedProductInclude(true),
     });
   });
 
@@ -102,47 +104,17 @@ describe('ProductService', () => {
 
     product.findFirst.mockResolvedValue(expectedProduct);
 
-    await expect(service.findAdminProductById('product_1')).resolves.toBe(
-      expectedProduct,
-    );
+    await expect(service.findAdminProductById('product_1')).resolves.toEqual({
+      ...expectedProduct,
+      images: [],
+    });
 
     expect(product.findFirst).toHaveBeenCalledWith({
       where: {
         id: 'product_1',
         deletedAt: null,
       },
-      include: {
-        categories: {
-          include: {
-            category: true,
-          },
-          orderBy: [
-            {
-              isPrimary: 'desc',
-            },
-            {
-              sortOrder: 'asc',
-            },
-          ],
-        },
-        attributeValues: {
-          include: {
-            attribute: true,
-            option: true,
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-        variants: {
-          where: {
-            deletedAt: null,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
-      },
+      include: getExpectedProductInclude(false),
     });
   });
 
@@ -153,4 +125,136 @@ describe('ProductService', () => {
       service.findPublicProductBySlug('missing-product'),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('checks product slug availability', async () => {
+    product.findUnique.mockResolvedValue({
+      id: 'product_1',
+      name: 'Daily Cleanser',
+      deletedAt: null,
+    });
+
+    await expect(
+      service.checkSlugAvailability(' Daily-Cleanser '),
+    ).resolves.toEqual({
+      slug: 'daily-cleanser',
+      available: false,
+      product: {
+        id: 'product_1',
+        name: 'Daily Cleanser',
+        deletedAt: null,
+      },
+    });
+
+    expect(product.findUnique).toHaveBeenCalledWith({
+      where: {
+        slug: 'daily-cleanser',
+      },
+      select: {
+        id: true,
+        name: true,
+        deletedAt: true,
+      },
+    });
+  });
+
+  it('archives product variants when product is archived', async () => {
+    product.findFirst.mockResolvedValue({
+      id: 'product_1',
+      variants: [],
+    });
+    product.update.mockResolvedValue({
+      id: 'product_1',
+      status: ProductStatus.ARCHIVED,
+    });
+
+    await service.updateStatus('product_1', {
+      status: ProductStatus.ARCHIVED,
+    });
+
+    expect(productVariant.updateMany).toHaveBeenCalledWith({
+      where: {
+        productId: 'product_1',
+        deletedAt: null,
+      },
+      data: {
+        isActive: false,
+      },
+    });
+  });
 });
+
+function getExpectedProductInclude(onlyActiveVariants: boolean) {
+  return {
+    categories: {
+      include: {
+        category: true,
+      },
+      orderBy: [
+        {
+          isPrimary: 'desc',
+        },
+        {
+          sortOrder: 'asc',
+        },
+      ],
+    },
+    attributeValues: {
+      include: {
+        attribute: true,
+        option: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    },
+    variants: {
+      where: {
+        deletedAt: null,
+        ...(onlyActiveVariants && {
+          isActive: true,
+        }),
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    },
+    ingredients: {
+      include: {
+        ingredient: true,
+      },
+      orderBy: {
+        sortOrder: 'asc',
+      },
+    },
+    audiences: {
+      include: {
+        audience: true,
+      },
+    },
+    skinTypes: {
+      include: {
+        skinType: true,
+      },
+    },
+    ageGroups: {
+      include: {
+        ageGroup: true,
+      },
+    },
+    hairProfiles: {
+      include: {
+        hairProfile: true,
+      },
+    },
+    concerns: {
+      include: {
+        concern: true,
+      },
+    },
+    productBenefits: {
+      include: {
+        benefit: true,
+      },
+    },
+  };
+}

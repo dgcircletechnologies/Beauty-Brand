@@ -52,6 +52,34 @@ export class ProductVariantService {
     return this.getActiveVariant(productId, variantId);
   }
 
+  async checkSkuAvailability(sku: string, excludeId?: string) {
+    const normalizedSku = this.normalizeSku(sku);
+    const variant = await this.prisma.productVariant.findUnique({
+      where: {
+        sku: normalizedSku,
+      },
+      select: {
+        id: true,
+        sku: true,
+        productId: true,
+        deletedAt: true,
+      },
+    });
+
+    return {
+      sku: normalizedSku,
+      available: !variant || variant.id === excludeId,
+      variant: variant
+        ? {
+            id: variant.id,
+            sku: variant.sku,
+            productId: variant.productId,
+            deletedAt: variant.deletedAt,
+          }
+        : null,
+    };
+  }
+
   async update(
     productId: string,
     variantId: string,
@@ -66,9 +94,6 @@ export class ProductVariantService {
         },
         include: this.getVariantInclude(),
         data: {
-          ...(dto.sku !== undefined && {
-            sku: this.normalizeSku(dto.sku),
-          }),
           ...(dto.price !== undefined && {
             price: dto.price,
           }),

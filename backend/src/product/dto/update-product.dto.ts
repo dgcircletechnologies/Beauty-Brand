@@ -4,7 +4,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -17,16 +16,6 @@ export class UpdateProductDto extends ProductRelationsDto {
   @IsNotEmpty()
   @MaxLength(180)
   name?: string;
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(220)
-  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-    message:
-      'slug must contain lowercase letters, numbers, and single hyphens only',
-  })
-  slug?: string;
 
   @IsOptional()
   @IsString()

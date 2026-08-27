@@ -89,6 +89,32 @@ export class ProductService {
     return this.productMetadataService.findAllMetadataOptions();
   }
 
+  async checkSlugAvailability(slug: string, excludeId?: string) {
+    const normalizedSlug = this.normalizeSlug(slug);
+    const product = await this.prisma.product.findUnique({
+      where: {
+        slug: normalizedSlug,
+      },
+      select: {
+        id: true,
+        name: true,
+        deletedAt: true,
+      },
+    });
+
+    return {
+      slug: normalizedSlug,
+      available: !product || product.id === excludeId,
+      product: product
+        ? {
+            id: product.id,
+            name: product.name,
+            deletedAt: product.deletedAt,
+          }
+        : null,
+    };
+  }
+
   async findPublicProducts() {
     const products = await this.prisma.product.findMany({
       where: {
@@ -149,8 +175,8 @@ export class ProductService {
     };
   }
 
-  findAdminProducts() {
-    return this.prisma.product.findMany({
+  async findAdminProducts() {
+    const products = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
       },
@@ -173,6 +199,15 @@ export class ProductService {
         createdAt: 'desc',
       },
     });
+
+    const imagesByProductId = await this.getImagesByProductId(
+      products.map((product) => product.id),
+    );
+
+    return products.map((product) => ({
+      ...product,
+      images: imagesByProductId.get(product.id) ?? [],
+    }));
   }
 
   async findAdminProductById(id: string) {
@@ -185,9 +220,6 @@ export class ProductService {
     const data = {
       ...(dto.name !== undefined && {
         name: dto.name.trim(),
-      }),
-      ...(dto.slug !== undefined && {
-        slug: this.normalizeSlug(dto.slug),
       }),
       ...(dto.shortDescription !== undefined && {
         shortDescription: this.nullableTrim(dto.shortDescription),
@@ -219,6 +251,18 @@ export class ProductService {
           data,
         });
 
+        if (dto.status === ProductStatus.ARCHIVED) {
+          await tx.productVariant.updateMany({
+            where: {
+              productId: id,
+              deletedAt: null,
+            },
+            data: {
+              isActive: false,
+            },
+          });
+        }
+
         await this.replaceProductRelations(tx, id, dto);
 
         return id;
@@ -234,28 +278,59 @@ export class ProductService {
   async updateStatus(id: string, dto: UpdateProductStatusDto) {
     await this.getActiveProductById(id);
 
-    return this.prisma.product.update({
-      where: {
-        id,
-      },
-      data: {
-        status: dto.status,
-        publishedAt: dto.status === ProductStatus.PUBLISHED ? new Date() : null,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.update({
+        where: {
+          id,
+        },
+        data: {
+          status: dto.status,
+          publishedAt:
+            dto.status === ProductStatus.PUBLISHED ? new Date() : null,
+        },
+      });
+
+      if (dto.status === ProductStatus.ARCHIVED) {
+        await tx.productVariant.updateMany({
+          where: {
+            productId: id,
+            deletedAt: null,
+          },
+          data: {
+            isActive: false,
+          },
+        });
+      }
+
+      return product;
     });
   }
 
   async softDelete(id: string) {
     await this.getActiveProductById(id);
 
-    return this.prisma.product.update({
-      where: {
-        id,
-      },
-      data: {
-        deletedAt: new Date(),
-        status: ProductStatus.ARCHIVED,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.update({
+        where: {
+          id,
+        },
+        data: {
+          deletedAt: new Date(),
+          status: ProductStatus.ARCHIVED,
+        },
+      });
+
+      await tx.productVariant.updateMany({
+        where: {
+          productId: id,
+          deletedAt: null,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      return product;
     });
   }
 

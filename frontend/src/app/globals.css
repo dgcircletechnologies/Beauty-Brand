@@ -2375,11 +2375,6 @@ button.attribute-view-select {
   font-size: 13px;
 }
 
-.admin-product-table {
-  display: grid;
-  gap: 8px;
-}
-
 .admin-order-list {
   display: grid;
   gap: 8px;
@@ -2454,47 +2449,124 @@ button.attribute-view-select {
   color: var(--muted);
 }
 
-.admin-product-row {
+.admin-product-table {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 110px minmax(180px, 0.8fr) 100px;
-  gap: 12px;
-  align-items: center;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.admin-product-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 12px;
+  padding: 10px;
   color: var(--foreground);
   background: #ffffff;
   text-align: left;
-  cursor: pointer;
 }
 
-.admin-product-row:hover,
-.admin-product-row.active {
+.admin-product-card:hover,
+.admin-product-card.active {
   border-color: rgba(24, 104, 219, 0.55);
   background: rgba(24, 104, 219, 0.04);
 }
 
-.admin-product-row span:first-child {
+.admin-product-card-select {
   display: grid;
-  gap: 4px;
+  gap: 8px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
-.admin-product-row small {
+.admin-product-card-media,
+.admin-product-card-empty-image {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 6px;
+  color: var(--muted);
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-product-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-product-card-slider {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 4px 6px;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.admin-product-card-slider button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.admin-product-card-body {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-product-card-body > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-product-card-select small,
+.product-detail-heading small {
   color: var(--muted);
 }
 
-.admin-product-row span:nth-child(2),
-.admin-product-row span:nth-child(4) {
-  justify-self: start;
+.admin-product-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-product-card-meta small {
   border-radius: 999px;
   padding: 4px 8px;
+  color: #334155;
   background: #eef2f7;
   font-size: 12px;
   font-weight: 800;
 }
 
-.admin-product-row span:nth-child(3) {
+.admin-product-card-categories {
   color: var(--muted);
   font-size: 13px;
 }
@@ -2507,6 +2579,40 @@ button.attribute-view-select {
 .variant-panel-content {
   display: grid;
   gap: 16px;
+}
+
+.product-detail-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.variant-row > label,
+.variant-row > .variant-image-picker,
+.variant-row > .product-image-grid,
+.variant-row > .row-actions {
+  grid-column: 1 / -1;
+}
+
+.variant-image-picker label.selected {
+  outline: 2px solid rgba(24, 104, 219, 0.72);
+  outline-offset: 2px;
+}
+
+.variant-readonly-images {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.variant-readonly-images img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #f8fafc;
 }
 
 .variant-panel-content h3 {
@@ -2760,7 +2866,9 @@ button.attribute-view-select {
   .attribute-option-row,
   .add-option-row,
   .category-tree-row,
-  .category-detail-grid {
+  .category-detail-grid,
+  .admin-product-card-select,
+  .product-detail-heading {
     grid-template-columns: 1fr;
     display: grid;
   }
@@ -2829,7 +2937,7 @@ button.attribute-view-select {
   .product-form-layout,
   .metadata-picker-grid,
   .product-row,
-  .admin-product-row,
+  .admin-product-card,
   .admin-data-row,
   .metadata-list-row,
   .cart-layout,

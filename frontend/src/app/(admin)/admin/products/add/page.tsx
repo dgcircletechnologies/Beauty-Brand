@@ -1,7 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -13,12 +20,15 @@ import {
   AdminAttribute,
   AdminAttributeOption,
   AdminProduct,
+  AdminProductSlugAvailability,
   AdminProductMetadataOptions,
   AdminProductImage,
   CreateAdminProductIngredientPayload,
   SetProductAttributeValuePayload,
   assignAdminVariantImages,
   assignAdminProductCategory,
+  checkAdminProductSlugAvailability,
+  checkAdminVariantSkuAvailability,
   createAdminProduct,
   createAdminProductVariant,
   getAdminAttributeOptions,
@@ -29,6 +39,7 @@ import {
   uploadAdminProductImages,
   uploadAdminVariantImages,
 } from "@/lib/api/admin";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 
 type AttributeFormValue = {
   selected: boolean;
@@ -61,6 +72,8 @@ const defaultMetadata: AdminProductMetadataOptions = {
   benefits: [],
   categories: [],
 };
+
+const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export default function AddProductPage() {
   const router = useRouter();
@@ -101,14 +114,23 @@ export default function AddProductPage() {
   >({});
   const [variantDrafts, setVariantDrafts] = useState<VariantDraft[]>([]);
   const [imageDrafts, setImageDrafts] = useState<ProductImageDraft[]>([]);
+  const [slugStatus, setSlugStatus] =
+    useState<AdminProductSlugAvailability | null>(null);
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const debouncedSlug = useDebouncedValue(slug, 450);
 
   const activeCategories = useMemo(
     () => metadata.categories.filter((category) => category.isActive),
     [metadata.categories],
+  );
+
+  const variantDraftSkus = useMemo(
+    () => variantDrafts.map((variantDraft) => variantDraft.sku),
+    [variantDrafts],
   );
 
   useEffect(() => {
@@ -163,6 +185,71 @@ export default function AddProductPage() {
       isMounted = false;
     };
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken || !debouncedSlug || !slugPattern.test(debouncedSlug)) {
+      return;
+    }
+
+    let isMounted = true;
+    const token = accessToken;
+    const slugSnapshot = debouncedSlug;
+
+    async function checkSlug() {
+      setIsCheckingSlug(true);
+
+      try {
+        const nextStatus = await checkAdminProductSlugAvailability(
+          token,
+          slugSnapshot,
+        );
+
+        if (isMounted) {
+          setSlugStatus(nextStatus);
+        }
+      } catch {
+        if (isMounted) {
+          setSlugStatus(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsCheckingSlug(false);
+        }
+      }
+    }
+
+    void checkSlug();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, debouncedSlug]);
+
+  const checkVariantSku = useCallback(
+    (sku: string) => {
+      if (!accessToken) {
+        return Promise.resolve({
+          sku: sku.trim().toUpperCase(),
+          available: true,
+          variant: null,
+        });
+      }
+
+      return checkAdminVariantSkuAvailability(accessToken, "__new__", sku);
+    },
+    [accessToken],
+  );
+
+  const slugIsValid = slugPattern.test(slug);
+  const slugIsAvailable = slugStatus?.slug === slug && slugStatus.available;
+  const canSubmit =
+    Boolean(accessToken) &&
+    Boolean(name.trim()) &&
+    slugIsValid &&
+    slugIsAvailable &&
+    !isSubmitting &&
+    !isCheckingSlug &&
+    !isLoading;
 
   function handleNameChange(nextName: string) {
     setName(nextName);
@@ -328,6 +415,17 @@ export default function AddProductPage() {
   }
 
   function addVariantDraft(payload: ProductVariantFormPayload) {
+    if (
+      variantDrafts.some(
+        (variantDraft) =>
+          variantDraft.sku.trim().toUpperCase() ===
+          payload.sku.trim().toUpperCase(),
+      )
+    ) {
+      setError("This SKU is already added to another draft variant");
+      return;
+    }
+
     const attributePayloads = buildVariantAttributePayloads();
 
     setVariantDrafts((current) => [
@@ -408,7 +506,7 @@ export default function AddProductPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!accessToken) {
+    if (!accessToken || !canSubmit) {
       return;
     }
 
@@ -563,6 +661,19 @@ export default function AddProductPage() {
                   pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
                   required
                 />
+                {slug ? (
+                  <small
+                    className={slugIsAvailable ? "form-success" : "form-error"}
+                  >
+                    {!slugIsValid
+                        ? "Use lowercase letters, numbers, and single hyphens only."
+                      : isCheckingSlug || slugStatus?.slug !== slug
+                        ? "Checking slug..."
+                        : slugIsAvailable
+                          ? "Slug is available."
+                          : "Slug is already in use."}
+                  </small>
+                ) : null}
               </label>
             </div>
 
@@ -871,11 +982,13 @@ export default function AddProductPage() {
           <FormBlock title="Variants">
             <ProductVariantForm
               asForm={false}
+              checkSkuAvailability={checkVariantSku}
               imageOptions={imageDrafts.map((image) => ({
                 key: image.key,
                 label: image.file.name,
                 previewUrl: image.previewUrl,
               }))}
+              reservedSkus={variantDraftSkus}
               submitLabel="Add Variant"
               onSubmit={addVariantDraft}
             >
@@ -966,7 +1079,7 @@ export default function AddProductPage() {
             <div className="form-actions">
               <button
                 className="primary-button"
-                disabled={isSubmitting || isLoading}
+                disabled={!canSubmit}
                 type="submit"
               >
                 {isSubmitting ? "Creating..." : "Create Product"}

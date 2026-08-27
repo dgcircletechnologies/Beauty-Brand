@@ -10,6 +10,7 @@ type ProductDelegateMock = {
 
 type ProductVariantDelegateMock = {
   create: jest.Mock;
+  findUnique: jest.Mock;
   findFirst: jest.Mock;
   findMany: jest.Mock;
   update: jest.Mock;
@@ -27,6 +28,7 @@ describe('ProductVariantService', () => {
 
     productVariant = {
       create: jest.fn(),
+      findUnique: jest.fn(),
       findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
@@ -85,6 +87,17 @@ describe('ProductVariantService', () => {
         stockQuantity: 0,
         isActive: true,
       },
+      include: {
+        attributeValues: {
+          include: {
+            attribute: true,
+            option: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
     });
   });
 
@@ -115,6 +128,40 @@ describe('ProductVariantService', () => {
         price: 10,
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('checks SKU availability', async () => {
+    productVariant.findUnique.mockResolvedValue({
+      id: 'variant_1',
+      sku: 'CLEANSER-100ML',
+      productId: 'product_1',
+      deletedAt: null,
+    });
+
+    await expect(
+      service.checkSkuAvailability(' cleanser-100ml '),
+    ).resolves.toEqual({
+      sku: 'CLEANSER-100ML',
+      available: false,
+      variant: {
+        id: 'variant_1',
+        sku: 'CLEANSER-100ML',
+        productId: 'product_1',
+        deletedAt: null,
+      },
+    });
+
+    expect(productVariant.findUnique).toHaveBeenCalledWith({
+      where: {
+        sku: 'CLEANSER-100ML',
+      },
+      select: {
+        id: true,
+        sku: true,
+        productId: true,
+        deletedAt: true,
+      },
+    });
   });
 
   it('fetches variants with attribute values', async () => {
