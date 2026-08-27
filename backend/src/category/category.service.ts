@@ -40,6 +40,7 @@ export class CategoryService {
             parentId,
             isActive: dto.isActive ?? true,
           },
+          include: this.getCategoryInclude(),
         });
 
         await tx.categoryClosure.create({
@@ -78,6 +79,21 @@ export class CategoryService {
     return this.prisma.category.findMany({
       where: {
         deletedAt: null,
+      },
+      include: {
+        images: {
+          where: {
+            deletedAt: null,
+          },
+          orderBy: [
+            {
+              sortOrder: 'asc',
+            },
+            {
+              createdAt: 'asc',
+            },
+          ],
+        },
       },
       orderBy: {
         name: 'asc',
@@ -127,6 +143,19 @@ export class CategoryService {
         slug: true,
         description: true,
         parentId: true,
+        images: {
+          where: {
+            deletedAt: null,
+          },
+          orderBy: [
+            {
+              sortOrder: 'asc',
+            },
+            {
+              createdAt: 'asc',
+            },
+          ],
+        },
       },
       orderBy: {
         name: 'asc',
@@ -142,6 +171,19 @@ export class CategoryService {
         isActive: true,
       },
       include: {
+        images: {
+          where: {
+            deletedAt: null,
+          },
+          orderBy: [
+            {
+              sortOrder: 'asc',
+            },
+            {
+              createdAt: 'asc',
+            },
+          ],
+        },
         parent: true,
         children: {
           where: {
@@ -302,6 +344,7 @@ export class CategoryService {
           id,
         },
         data: this.getCategoryUpdateData(dto),
+        include: this.getCategoryInclude(),
       })
       .catch((error: unknown) => {
         this.handleUniqueSlugError(error);
@@ -354,6 +397,19 @@ export class CategoryService {
         deletedAt: null,
       },
       include: {
+        images: {
+          where: {
+            deletedAt: null,
+          },
+          orderBy: [
+            {
+              sortOrder: 'asc',
+            },
+            {
+              createdAt: 'asc',
+            },
+          ],
+        },
         parent: true,
         children: {
           where: {
@@ -473,8 +529,27 @@ export class CategoryService {
           id,
         },
         data: this.getCategoryUpdateData(dto),
+        include: this.getCategoryInclude(),
       });
     });
+  }
+
+  private getCategoryInclude() {
+    return {
+      images: {
+        where: {
+          deletedAt: null,
+        },
+        orderBy: [
+          {
+            sortOrder: 'asc' as const,
+          },
+          {
+            createdAt: 'asc' as const,
+          },
+        ],
+      },
+    };
   }
 
   private getCategoryUpdateData(dto: UpdateCategoryDto) {

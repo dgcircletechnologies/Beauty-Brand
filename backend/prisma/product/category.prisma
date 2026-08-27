@@ -14,6 +14,7 @@ model Category {
 
   products   ProductCategory[]
   attributes CategoryAttribute[]
+  images     CategoryImage[]
 
   ancestorLinks   CategoryClosure[] @relation("CategoryClosureAncestor")
   descendantLinks CategoryClosure[] @relation("CategoryClosureDescendant")
@@ -22,5 +23,28 @@ model Category {
 
   @@index([parentId])
   @@index([isActive])
+  @@index([deletedAt])
+}
+
+model CategoryImage {
+  id         String    @id @default(cuid())
+  categoryId String
+  url        String
+  publicId   String?
+  altText    String?
+  sortOrder  Int       @default(0)
+  isPrimary  Boolean   @default(false)
+  width      Int?
+  height     Int?
+  format     String?
+  bytes      Int?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId, sortOrder])
+  @@index([categoryId, isPrimary])
   @@index([deletedAt])
 }

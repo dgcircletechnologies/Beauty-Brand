@@ -29,6 +29,22 @@ type CategoryTransactionMock = {
   categoryClosure: CategoryClosureDelegateMock;
 };
 
+const categoryImagesInclude = {
+  images: {
+    where: {
+      deletedAt: null,
+    },
+    orderBy: [
+      {
+        sortOrder: 'asc',
+      },
+      {
+        createdAt: 'asc',
+      },
+    ],
+  },
+};
+
 describe('CategoryService', () => {
   let service: CategoryService;
   let category: CategoryDelegateMock;
@@ -102,6 +118,7 @@ describe('CategoryService', () => {
         parentId: null,
         isActive: true,
       },
+      include: categoryImagesInclude,
     });
     expect(categoryClosure.create).toHaveBeenCalledWith({
       data: {
@@ -172,6 +189,7 @@ describe('CategoryService', () => {
       where: {
         deletedAt: null,
       },
+      include: categoryImagesInclude,
       orderBy: {
         name: 'asc',
       },
@@ -244,6 +262,7 @@ describe('CategoryService', () => {
         slug: true,
         description: true,
         parentId: true,
+        images: categoryImagesInclude.images,
       },
       orderBy: {
         name: 'asc',
@@ -366,6 +385,7 @@ describe('CategoryService', () => {
         isActive: true,
       },
       include: {
+        images: categoryImagesInclude.images,
         parent: true,
         children: {
           where: {
@@ -574,6 +594,7 @@ describe('CategoryService', () => {
       data: {
         name: 'Cleansers',
       },
+      include: categoryImagesInclude,
     });
   });
 
