@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
@@ -18,8 +18,8 @@ const accountLinks = [
 
 const footerNavigation = {
   shop: [
-    { name: "All products", href: "/" },
-    { name: "Featured", href: "/" },
+    { name: "All products", href: "/shop" },
+    { name: "Featured", href: "/shop?sort=featured" },
     { name: "Cart", href: "/cart" },
     { name: "Wishlist", href: "/wishlist" },
   ],
@@ -102,6 +102,7 @@ function BrandLogo() {
 export function UserNavbar() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated, isBootstrapping, logout, user } = useAuth();
   const {
     currencies,
@@ -115,6 +116,7 @@ export function UserNavbar() {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
   const exploreCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -142,6 +144,10 @@ export function UserNavbar() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    setSearchQuery(searchParams.get("q") ?? "");
+  }, [searchParams]);
 
   useEffect(() => {
     return () => {
@@ -183,6 +189,27 @@ export function UserNavbar() {
     exploreCloseTimeoutRef.current = setTimeout(() => {
       setIsExploreOpen(false);
     }, 160);
+  }
+
+  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const query = searchQuery.trim();
+    const nextParams = new URLSearchParams(
+      pathname === "/shop" ? searchParams.toString() : "",
+    );
+
+    nextParams.delete("page");
+
+    if (query) {
+      nextParams.set("q", query);
+    } else {
+      nextParams.delete("q");
+    }
+
+    const nextQuery = nextParams.toString();
+    router.push(`/shop${nextQuery ? `?${nextQuery}` : ""}`);
+    closeMenus();
   }
 
   return (
@@ -228,7 +255,7 @@ export function UserNavbar() {
                             childCategories.map((category) => (
                               <li key={category.id}>
                                 <Link
-                                  href={`/?category=${category.slug}`}
+                                  href={`/shop?category=${category.slug}`}
                                   onClick={closeMenus}
                                 >
                                   {category.name}
@@ -251,7 +278,7 @@ export function UserNavbar() {
                           return (
                             <Link
                               className="explore-feature-card"
-                              href={`/?category=${category.slug}`}
+                              href={`/shop?category=${category.slug}`}
                               key={category.id}
                               onClick={closeMenus}
                             >
@@ -273,7 +300,7 @@ export function UserNavbar() {
                 </div>
               ) : null}
             </div>
-            <Link href="/">Shop</Link>
+            <Link href="/shop">Shop</Link>
             <Link href="/checkout">Checkout</Link>
           </div>
 
@@ -302,13 +329,17 @@ export function UserNavbar() {
             >
               <MenuIcon />
             </button>
-            <Link
-              className="nav-icon-button nav-search-link"
-              href="/"
-              aria-label="Search"
-            >
-              <SearchIcon />
-            </Link>
+            <form className="nav-search-form" onSubmit={handleSearchSubmit}>
+              <input
+                aria-label="Search products"
+                placeholder="Search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+              <button type="submit" aria-label="Search">
+                <SearchIcon />
+              </button>
+            </form>
             <div className="account-menu">
               <button
                 className="nav-icon-button"
@@ -363,7 +394,7 @@ export function UserNavbar() {
             <Link href="/" onClick={closeMenus}>
               Home
             </Link>
-            <Link href="/" onClick={closeMenus}>
+            <Link href="/shop" onClick={closeMenus}>
               Shop
             </Link>
             <Link href="/categories" onClick={closeMenus}>

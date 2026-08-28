@@ -1,6 +1,7 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
+import { PublicProductQueryDto } from '../dto/public-product-query.dto';
 import { ProductService } from '../product.service';
 
 @Controller('products')
@@ -9,8 +10,8 @@ export class ProductPublicController {
 
   @Get()
   @ResponseMessage('Products fetched successfully')
-  findPublicProducts() {
-    return this.productService.findPublicProducts();
+  findPublicProducts(@Query() query: PublicProductQueryDto) {
+    return this.productService.findPublicProducts(query);
   }
 
   @Get(':slug')

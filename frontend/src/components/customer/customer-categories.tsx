@@ -74,7 +74,7 @@ export function CustomerCategories() {
             return (
               <Link
                 className="customer-category-card"
-                href={`/?category=${category.slug}`}
+                href={`/shop?category=${category.slug}`}
                 key={category.id}
               >
                 {image ? (

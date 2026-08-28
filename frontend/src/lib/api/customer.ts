@@ -110,6 +110,57 @@ export type CustomerProduct = {
   attributeValues?: CustomerProductAttributeValue[];
 };
 
+export type CustomerShopFilterOption = {
+  name: string;
+  slug: string;
+};
+
+export type CustomerShopPriceRange = {
+  name: string;
+  minPrice: number | null;
+  maxPrice: number | null;
+};
+
+export type CustomerShopFilters = {
+  categories: CustomerShopFilterOption[];
+  skinTypes: CustomerShopFilterOption[];
+  concerns: CustomerShopFilterOption[];
+  benefits: CustomerShopFilterOption[];
+  ageGroups: CustomerShopFilterOption[];
+  formula: CustomerShopFilterOption[];
+  priceRanges: CustomerShopPriceRange[];
+};
+
+export type CustomerShopPagination = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+};
+
+export type CustomerShopProductsResponse = {
+  items: CustomerProduct[];
+  pagination: CustomerShopPagination;
+  filters: CustomerShopFilters;
+};
+
+export type CustomerShopProductParams = {
+  q?: string;
+  category?: string[];
+  skinType?: string[];
+  concern?: string[];
+  benefit?: string[];
+  ageGroup?: string[];
+  formula?: string[];
+  minPrice?: string;
+  maxPrice?: string;
+  sort?: string;
+  page?: string;
+  pageSize?: string;
+};
+
 export type CustomerCurrency = {
   code: string;
   name: string;
@@ -409,8 +460,61 @@ function withAuth(accessToken: string) {
   };
 }
 
-export function getCustomerProducts() {
-  return apiRequest<CustomerProduct[]>("/products");
+function appendListParam(
+  params: URLSearchParams,
+  name: string,
+  values: string[] | undefined,
+) {
+  if (values?.length) {
+    params.set(name, values.join(","));
+  }
+}
+
+export function getCustomerShopProducts(options: CustomerShopProductParams = {}) {
+  const params = new URLSearchParams();
+
+  if (options.q) {
+    params.set("q", options.q);
+  }
+
+  appendListParam(params, "category", options.category);
+  appendListParam(params, "skinType", options.skinType);
+  appendListParam(params, "concern", options.concern);
+  appendListParam(params, "benefit", options.benefit);
+  appendListParam(params, "ageGroup", options.ageGroup);
+  appendListParam(params, "formula", options.formula);
+
+  if (options.minPrice) {
+    params.set("minPrice", options.minPrice);
+  }
+
+  if (options.maxPrice) {
+    params.set("maxPrice", options.maxPrice);
+  }
+
+  if (options.sort) {
+    params.set("sort", options.sort);
+  }
+
+  if (options.page) {
+    params.set("page", options.page);
+  }
+
+  if (options.pageSize) {
+    params.set("pageSize", options.pageSize);
+  }
+
+  const query = params.toString();
+
+  return apiRequest<CustomerShopProductsResponse>(
+    `/products${query ? `?${query}` : ""}`,
+  );
+}
+
+export async function getCustomerProducts() {
+  const response = await getCustomerShopProducts();
+
+  return response.items;
 }
 
 export function getCustomerProduct(slug: string) {

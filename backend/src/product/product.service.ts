@@ -8,6 +8,7 @@ import { ProductStatus } from '../../generated/prisma/enums.cjs';
 import { PrismaService } from '../database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductRelationsDto } from './dto/product-relations.dto';
+import { PublicProductQueryDto } from './dto/public-product-query.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductMetadataService } from './product-metadata.service';
@@ -115,11 +116,65 @@ export class ProductService {
     };
   }
 
-  async findPublicProducts() {
+  async findPublicProducts(query: PublicProductQueryDto = {}) {
+    const page = this.getPositiveInteger(query.page, 1);
+    const pageSize = Math.min(this.getPositiveInteger(query.pageSize, 12), 48);
+    const selectedFilters = this.getPublicProductFilters(query);
     const products = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
         status: ProductStatus.PUBLISHED,
+        ...selectedFilters,
+      },
+      include: {
+        categories: {
+          include: {
+            category: true,
+          },
+          orderBy: [
+            {
+              isPrimary: 'desc',
+            },
+            {
+              sortOrder: 'asc',
+            },
+          ],
+        },
+        variants: {
+          where: {
+            deletedAt: null,
+            isActive: true,
+          },
+          orderBy: {
+            price: 'asc',
+          },
+        },
+        skinTypes: {
+          include: {
+            skinType: true,
+          },
+        },
+        concerns: {
+          include: {
+            concern: true,
+          },
+        },
+        productBenefits: {
+          include: {
+            benefit: true,
+          },
+        },
+        ageGroups: {
+          include: {
+            ageGroup: true,
+          },
+        },
+        attributeValues: {
+          include: {
+            attribute: true,
+            option: true,
+          },
+        },
       },
       orderBy: [
         {
@@ -134,14 +189,33 @@ export class ProductService {
       ],
     });
 
+    const sortedProducts = this.sortPublicProducts(products, query.sort);
+    const totalItems = sortedProducts.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const paginatedProducts = sortedProducts.slice(
+      (safePage - 1) * pageSize,
+      safePage * pageSize,
+    );
     const imagesByProductId = await this.getImagesByProductId(
-      products.map((product) => product.id),
+      paginatedProducts.map((product) => product.id),
     );
 
-    return products.map((product) => ({
-      ...product,
-      images: imagesByProductId.get(product.id) ?? [],
-    }));
+    return {
+      items: paginatedProducts.map((product) => ({
+        ...product,
+        images: imagesByProductId.get(product.id) ?? [],
+      })),
+      pagination: {
+        page: safePage,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasPreviousPage: safePage > 1,
+        hasNextPage: safePage < totalPages,
+      },
+      filters: await this.getPublicShopFilters(),
+    };
   }
 
   async findPublicProductBySlug(slug: string) {
@@ -173,6 +247,346 @@ export class ProductService {
         images: variantImagesByVariantId.get(variant.id) ?? [],
       })),
     };
+  }
+
+  private getPublicProductFilters(query: PublicProductQueryDto) {
+    const categorySlugs = this.parseList(query.category);
+    const skinTypeSlugs = this.parseList(query.skinType);
+    const concernSlugs = this.parseList(query.concern);
+    const benefitSlugs = this.parseList(query.benefit);
+    const ageGroupSlugs = this.parseList(query.ageGroup);
+    const formulas = this.parseList(query.formula);
+    const minPrice = this.parsePrice(query.minPrice);
+    const maxPrice = this.parsePrice(query.maxPrice);
+    const searchTerm = query.q?.trim();
+    const andFilters: Record<string, unknown>[] = [];
+
+    if (searchTerm) {
+      andFilters.push({
+        OR: [
+          {
+            name: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+          {
+            shortDescription: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+          {
+            description: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      });
+    }
+
+    if (categorySlugs.length) {
+      andFilters.push({
+        categories: {
+          some: {
+            category: {
+              slug: {
+                in: categorySlugs,
+              },
+              parentId: {
+                not: null,
+              },
+              isActive: true,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+    }
+
+    if (skinTypeSlugs.length) {
+      andFilters.push({
+        skinTypes: {
+          some: {
+            skinType: {
+              slug: {
+                in: skinTypeSlugs,
+              },
+              isActive: true,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+    }
+
+    if (concernSlugs.length) {
+      andFilters.push({
+        concerns: {
+          some: {
+            concern: {
+              slug: {
+                in: concernSlugs,
+              },
+              isActive: true,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+    }
+
+    if (benefitSlugs.length) {
+      andFilters.push({
+        productBenefits: {
+          some: {
+            benefit: {
+              slug: {
+                in: benefitSlugs,
+              },
+              isActive: true,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+    }
+
+    if (ageGroupSlugs.length) {
+      andFilters.push({
+        ageGroups: {
+          some: {
+            ageGroup: {
+              slug: {
+                in: ageGroupSlugs,
+              },
+              isActive: true,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+    }
+
+    if (minPrice !== null || maxPrice !== null) {
+      andFilters.push({
+        variants: {
+          some: {
+            deletedAt: null,
+            isActive: true,
+            price: {
+              ...(minPrice !== null && {
+                gte: minPrice,
+              }),
+              ...(maxPrice !== null && {
+                lte: maxPrice,
+              }),
+            },
+          },
+        },
+      });
+    }
+
+    if (formulas.includes('fragrance-free')) {
+      andFilters.push({
+        attributeValues: {
+          some: {
+            booleanValue: true,
+            attribute: {
+              slug: 'fragrance-free',
+            },
+          },
+        },
+      });
+    }
+
+    if (formulas.includes('spf')) {
+      andFilters.push({
+        attributeValues: {
+          some: {
+            numberValue: {
+              gt: 0,
+            },
+            attribute: {
+              slug: 'spf',
+            },
+          },
+        },
+      });
+    }
+
+    return {
+      ...(andFilters.length && {
+        AND: andFilters,
+      }),
+    };
+  }
+
+  private sortPublicProducts<T extends { variants?: { price: unknown }[]; isFeatured: boolean; publishedAt: Date | null; createdAt: Date; averageRating: unknown }>(
+    products: T[],
+    sort = 'featured',
+  ) {
+    const priceOf = (product: T) => Number(product.variants?.[0]?.price ?? 0);
+
+    return [...products].sort((first, second) => {
+      if (sort === 'price-asc') {
+        return priceOf(first) - priceOf(second);
+      }
+
+      if (sort === 'price-desc') {
+        return priceOf(second) - priceOf(first);
+      }
+
+      if (sort === 'rating') {
+        return Number(second.averageRating) - Number(first.averageRating);
+      }
+
+      if (sort === 'newest') {
+        return (
+          (second.publishedAt ?? second.createdAt).getTime() -
+          (first.publishedAt ?? first.createdAt).getTime()
+        );
+      }
+
+      return Number(second.isFeatured) - Number(first.isFeatured);
+    });
+  }
+
+  private async getPublicShopFilters() {
+    const [
+      categories,
+      skinTypes,
+      concerns,
+      benefits,
+      ageGroups,
+      formulaAttributes,
+    ] = await Promise.all([
+      this.prisma.category.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+          parentId: {
+            not: null,
+          },
+        },
+        select: {
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+      this.prisma.skinType.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+        },
+        select: {
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+      this.prisma.concern.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+        },
+        select: {
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+      this.prisma.benefit.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+        },
+        select: {
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+      this.prisma.ageGroup.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+        },
+        select: {
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          minAge: 'asc',
+        },
+      }),
+      this.prisma.attributeDefinition.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+          slug: {
+            in: ['fragrance-free', 'spf'],
+          },
+        },
+        select: {
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+    ]);
+
+    return {
+      categories,
+      skinTypes,
+      concerns,
+      benefits,
+      ageGroups,
+      formula: formulaAttributes.map((attribute) => ({
+        name: attribute.slug === 'spf' ? 'Has SPF' : attribute.name,
+        slug: attribute.slug === 'spf' ? 'spf' : attribute.slug,
+      })),
+      priceRanges: [
+        { name: 'Under Rs 1,000', minPrice: null, maxPrice: 1000 },
+        { name: 'Rs 1,000 - Rs 1,999', minPrice: 1000, maxPrice: 1999 },
+        { name: 'Rs 2,000+', minPrice: 2000, maxPrice: null },
+      ],
+    };
+  }
+
+  private getPositiveInteger(value: string | undefined, fallback: number) {
+    const parsed = Number.parseInt(value ?? '', 10);
+
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
+  private parsePrice(value: string | undefined) {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+
+  private parseList(value: string | undefined) {
+    return [
+      ...new Set(
+        (value ?? '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter((item) => /^[a-z0-9-]+$/.test(item)),
+      ),
+    ];
   }
 
   async findAdminProducts() {
