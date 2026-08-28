@@ -165,7 +165,31 @@ export class CartService {
           include: {
             variant: {
               include: {
-                product: true,
+                product: {
+                  include: {
+                    images: {
+                      where: {
+                        deletedAt: null,
+                      },
+                      orderBy: this.getCartImageOrderBy(),
+                    },
+                  },
+                },
+                images: {
+                  where: {
+                    deletedAt: null,
+                  },
+                  orderBy: this.getCartImageOrderBy(),
+                },
+                attributeValues: {
+                  include: {
+                    attribute: true,
+                    option: true,
+                  },
+                  orderBy: {
+                    createdAt: 'asc',
+                  },
+                },
               },
             },
           },
@@ -249,7 +273,12 @@ export class CartService {
           stockQuantity: item.variant.stockQuantity,
           isActive: item.variant.isActive,
           deletedAt: item.variant.deletedAt,
+          attributeValues: item.variant.attributeValues,
         },
+        image:
+          item.variant.images[0] ??
+          item.variant.product.images[0] ??
+          null,
       };
     });
 
@@ -280,6 +309,20 @@ export class CartService {
   private roundMoney(amount: number, decimalDigits: number): number {
     const factor = 10 ** decimalDigits;
     return Math.round((amount + Number.EPSILON) * factor) / factor;
+  }
+
+  private getCartImageOrderBy() {
+    return [
+      {
+        isPrimary: 'desc' as const,
+      },
+      {
+        sortOrder: 'asc' as const,
+      },
+      {
+        createdAt: 'asc' as const,
+      },
+    ];
   }
 
   private ensureCartItemCanBePurchased(

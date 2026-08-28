@@ -1,12 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { UserShell } from "@/components/customer/user-shell";
 import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
+
+function getAttributeDisplayValue(
+  attributeValue: customerApi.CustomerProductAttributeValue,
+) {
+  if (attributeValue.option) {
+    return attributeValue.option.label;
+  }
+
+  if (attributeValue.textValue) {
+    return attributeValue.textValue;
+  }
+
+  if (attributeValue.numberValue) {
+    return attributeValue.numberValue;
+  }
+
+  if (attributeValue.booleanValue !== null) {
+    return attributeValue.booleanValue ? "Yes" : "No";
+  }
+
+  return null;
+}
 
 export default function CartPage() {
   const router = useRouter();
@@ -17,6 +40,8 @@ export default function CartPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+  const availableItemCount =
+    cart?.items.filter((item) => item.availability.isAvailable).length ?? 0;
 
   useEffect(() => {
     let isMounted = true;
@@ -137,11 +162,12 @@ export default function CartPage() {
   return (
     <UserShell>
       <main className="customer-page">
-        <section className="dashboard-header">
+        <section className="dashboard-header cart-template-header">
           <div>
             <p className="eyebrow">Cart</p>
-            <h1>Your cart items</h1>
-            <p>Use this page to check whether add to cart is working.</p>
+            <h1>
+              Shopping <em>Cart</em>
+            </h1>
           </div>
         </section>
 
@@ -159,9 +185,7 @@ export default function CartPage() {
                   <input
                     checked={
                       selectedItemIds.length > 0 &&
-                      selectedItemIds.length ===
-                        cart.items.filter((item) => item.availability.isAvailable)
-                          .length
+                      selectedItemIds.length === availableItemCount
                     }
                     type="checkbox"
                     onChange={toggleAllSelection}
@@ -184,54 +208,133 @@ export default function CartPage() {
                       onChange={() => toggleItemSelection(item.id)}
                     />
                   </label>
-                  <div>
-                    <h2>{item.product.name}</h2>
-                    <p>SKU: {item.variant.sku}</p>
-                    <p>{item.availability.message}</p>
-                  </div>
-                  <div className="quantity-controls">
-                    <button
-                      className="secondary-button compact-button"
-                      type="button"
-                      disabled={updatingItemId === item.id || item.quantity <= 1}
-                      onClick={() => void updateQuantity(item.id, item.quantity - 1)}
-                    >
-                      -
-                    </button>
-                    <span>{item.quantity}</span>
-                    <button
-                      className="secondary-button compact-button"
-                      type="button"
-                      disabled={updatingItemId === item.id}
-                      onClick={() => void updateQuantity(item.id, item.quantity + 1)}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <strong>{formatPrice(item.baseLineTotal)}</strong>
-                  <button
-                    className="danger-button compact-button"
-                    type="button"
-                    disabled={updatingItemId === item.id}
-                    onClick={() => void removeItem(item.id)}
+
+                  <Link
+                    className="cart-item-visual"
+                    href={`/products/${item.product.slug}`}
                   >
-                    Remove
-                  </button>
+                    {item.image ? (
+                      <img
+                        alt={item.image.altText ?? item.product.name}
+                        src={item.image.url}
+                      />
+                    ) : (
+                      <span>{item.product.name.slice(0, 2).toUpperCase()}</span>
+                    )}
+                  </Link>
+
+                  <div className="cart-item-main">
+                    <div className="cart-item-copy">
+                      <h2>
+                        <Link href={`/products/${item.product.slug}`}>
+                          {item.product.name}
+                        </Link>
+                      </h2>
+                      <div className="cart-item-attributes">
+                        {(item.variant.attributeValues ?? [])
+                          .map((attributeValue) =>
+                            getAttributeDisplayValue(attributeValue),
+                          )
+                          .filter(Boolean)
+                          .slice(0, 3)
+                          .map((value) => (
+                            <span key={value}>{value}</span>
+                          ))}
+                        <span>SKU {item.variant.sku}</span>
+                      </div>
+                      <strong>{formatPrice(item.displayUnitPrice)}</strong>
+                    </div>
+
+                    <div className="cart-item-controls">
+                      <div className="quantity-controls">
+                        <button
+                          type="button"
+                          disabled={updatingItemId === item.id || item.quantity <= 1}
+                          onClick={() =>
+                            void updateQuantity(item.id, item.quantity - 1)
+                          }
+                        >
+                          -
+                        </button>
+                        <span>{item.quantity}</span>
+                        <button
+                          type="button"
+                          disabled={updatingItemId === item.id}
+                          onClick={() =>
+                            void updateQuantity(item.id, item.quantity + 1)
+                          }
+                        >
+                          +
+                        </button>
+                      </div>
+                      <button
+                        className="cart-remove-button"
+                        type="button"
+                        disabled={updatingItemId === item.id}
+                        onClick={() => void removeItem(item.id)}
+                      >
+                        <span aria-hidden="true">x</span>
+                        <span className="sr-only">Remove</span>
+                      </button>
+                    </div>
+
+                    <div className="cart-item-footer">
+                      <p
+                        className={
+                          item.availability.isAvailable
+                            ? "cart-stock-message available"
+                            : "cart-stock-message"
+                        }
+                      >
+                        <span aria-hidden="true">
+                          {item.availability.isAvailable ? "OK" : "!"}
+                        </span>
+                        {item.availability.isAvailable
+                          ? "In stock"
+                          : item.availability.message}
+                      </p>
+                      <strong>{formatPrice(item.displayLineTotal)}</strong>
+                    </div>
+                  </div>
                 </article>
               ))}
             </div>
             <aside className="cart-summary">
-              <p className="eyebrow">Summary</p>
-              <h2>{cart.itemCount} item(s)</h2>
-              <strong>{formatPrice(cart.baseSubtotal)}</strong>
+              <h2>
+                <em>Order</em> summary
+              </h2>
+              <dl>
+                <div>
+                  <dt>Subtotal</dt>
+                  <dd>{formatPrice(cart.displaySubtotal)}</dd>
+                </div>
+                <div>
+                  <dt>Shipping estimate</dt>
+                  <dd>At checkout</dd>
+                </div>
+                <div>
+                  <dt>Tax estimate</dt>
+                  <dd>At checkout</dd>
+                </div>
+                <div>
+                  <dt>Order total</dt>
+                  <dd>{formatPrice(cart.displaySubtotal)}</dd>
+                </div>
+              </dl>
               <button
                 className="primary-button"
                 disabled={cart.hasUnavailableItems && selectedItemIds.length === 0}
                 type="button"
                 onClick={goToCheckout}
               >
-                {selectedItemIds.length ? "Checkout Selected" : "Checkout All"}
+                Checkout
               </button>
+              <p className="cart-summary-note">
+                or{" "}
+                <Link href="/shop">
+                  Continue Shopping <span aria-hidden="true">-&gt;</span>
+                </Link>
+              </p>
               {cart.hasUnavailableItems && selectedItemIds.length === 0 ? (
                 <p>Select available items or remove unavailable ones first.</p>
               ) : null}
@@ -240,7 +343,10 @@ export default function CartPage() {
         ) : (
           <section className="empty-surface">
             <h2>Your cart is empty</h2>
-            <p>Add a product from the dashboard and it will show here.</p>
+            <p>Add a product from the shop and it will show here.</p>
+            <Link className="primary-link-button compact-button" href="/shop">
+              Continue Shopping
+            </Link>
           </section>
         )}
       </main>

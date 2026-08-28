@@ -197,7 +197,9 @@ export type CartItem = {
     stockQuantity: number;
     isActive: boolean;
     deletedAt: string | null;
+    attributeValues?: CustomerProductAttributeValue[];
   };
+  image: CustomerProductImage | null;
 };
 
 export type CustomerCart = {
@@ -323,9 +325,14 @@ export type CustomerOrder = {
   displayTaxAmount: number;
   displayDiscountAmount: number;
   displayTotalAmount: number;
+  shippingMethodName: string | null;
+  shippingServiceCode: string | null;
   customerEmail: string;
   customerPhone: string | null;
   placedAt: string | null;
+  paidAt?: string | null;
+  cancelledAt?: string | null;
+  deliveredAt?: string | null;
   createdAt: string;
   displayCurrency: {
     code: string;
@@ -344,6 +351,7 @@ export type CustomerOrder = {
     displayLineTotal: number;
     unitPrice: number;
     lineTotal: number;
+    image: CustomerProductImage | null;
   }[];
   addresses: {
     id: string;
@@ -383,6 +391,11 @@ export type CustomerOrder = {
     requestedAt: string;
     decidedAt: string | null;
   }[];
+};
+
+export type CustomerOrdersResponse = {
+  items: CustomerOrder[];
+  pagination: CustomerShopPagination;
 };
 
 export type CustomerAddress = {
@@ -663,8 +676,29 @@ export function verifyRazorpayPayment(
   });
 }
 
-export function getOrders(accessToken: string) {
-  return apiRequest<CustomerOrder[]>("/orders", {
+export function getOrders(
+  accessToken: string,
+  options: { page?: number; pageSize?: number } = {},
+) {
+  const params = new URLSearchParams();
+
+  if (options.page) {
+    params.set("page", String(options.page));
+  }
+
+  if (options.pageSize) {
+    params.set("pageSize", String(options.pageSize));
+  }
+
+  const query = params.toString();
+
+  return apiRequest<CustomerOrdersResponse>(`/orders${query ? `?${query}` : ""}`, {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function getOrder(accessToken: string, orderId: string) {
+  return apiRequest<CustomerOrder>(`/orders/${encodeURIComponent(orderId)}`, {
     headers: withAuth(accessToken),
   });
 }

@@ -103,18 +103,62 @@ export class OrderService {
     };
   }
 
-  async getCustomerOrders(userId: string) {
-    const orders = await this.prisma.order.findMany({
-      where: {
-        userId,
-      },
-      include: this.orderInclude(),
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+  async getCustomerOrders(
+    userId: string,
+    query: { page?: string; pageSize?: string } = {},
+  ) {
+    const page = this.getPositiveInteger(query.page, 1);
+    const pageSize = Math.min(this.getPositiveInteger(query.pageSize, 10), 20);
+    const where = {
+      userId,
+    };
+    const [orders, totalItems] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        include: this.orderInclude(),
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.order.count({
+        where,
+      }),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const safePage = Math.min(page, totalPages);
 
-    return orders.map((order) => this.toOrderView(order));
+    const safeOrders =
+      safePage === page
+        ? orders
+        : await this.prisma.order.findMany({
+            where,
+            include: this.orderInclude(),
+            orderBy: {
+              createdAt: 'desc',
+            },
+            skip: (safePage - 1) * pageSize,
+            take: pageSize,
+          });
+
+    return {
+      items: safeOrders.map((order) => this.toOrderView(order)),
+      pagination: {
+        page: safePage,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasPreviousPage: safePage > 1,
+        hasNextPage: safePage < totalPages,
+      },
+    };
+  }
+
+  async getCustomerOrderById(userId: string, orderId: string) {
+    const order = await this.getCustomerOrder(userId, orderId);
+
+    return this.toOrderView(order);
   }
 
   async createOrder(userId: string, dto: CreateOrderDto) {
@@ -1053,6 +1097,28 @@ export class OrderService {
   private orderInclude() {
     return {
       items: {
+        include: {
+          product: {
+            include: {
+              images: {
+                where: {
+                  deletedAt: null,
+                },
+                orderBy: this.getOrderImageOrderBy(),
+              },
+            },
+          },
+          variant: {
+            include: {
+              images: {
+                where: {
+                  deletedAt: null,
+                },
+                orderBy: this.getOrderImageOrderBy(),
+              },
+            },
+          },
+        },
         orderBy: {
           createdAt: 'asc' as const,
         },
@@ -1121,8 +1187,34 @@ export class OrderService {
         displayLineTotal: convert(item.lineTotal),
         unitPrice: Number(item.unitPrice),
         lineTotal: Number(item.lineTotal),
+        image:
+          item.variant?.images?.[0] ??
+          item.product?.images?.[0] ??
+          null,
+        product: undefined,
+        variant: undefined,
       })),
     };
+  }
+
+  private getOrderImageOrderBy() {
+    return [
+      {
+        isPrimary: 'desc' as const,
+      },
+      {
+        sortOrder: 'asc' as const,
+      },
+      {
+        createdAt: 'asc' as const,
+      },
+    ];
+  }
+
+  private getPositiveInteger(value: string | undefined, fallback: number) {
+    const parsed = Number.parseInt(value ?? '', 10);
+
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
   private generateOrderNumber() {

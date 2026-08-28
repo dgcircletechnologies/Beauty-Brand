@@ -38,8 +38,24 @@ export class CustomerOrderController {
 
   @Get()
   @ResponseMessage('Orders fetched successfully')
-  getOrders(@Req() request: AuthenticatedRequest) {
-    return this.orderService.getCustomerOrders(request.user.id);
+  getOrders(
+    @Req() request: AuthenticatedRequest,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.orderService.getCustomerOrders(request.user.id, {
+      page,
+      pageSize,
+    });
+  }
+
+  @Get(':orderId')
+  @ResponseMessage('Order fetched successfully')
+  getOrder(
+    @Req() request: AuthenticatedRequest,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.orderService.getCustomerOrderById(request.user.id, orderId);
   }
 
   @Post(':orderId/cancellation-requests')

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 import { UserShell } from "@/components/customer/user-shell";
@@ -48,6 +49,7 @@ export default function AddressesPage() {
   >([]);
   const [editingAddress, setEditingAddress] =
     useState<customerApi.CustomerAddress | null>(null);
+  const [isAddressFormOpen, setIsAddressFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(
@@ -140,6 +142,7 @@ export default function AddressesPage() {
       }
 
       setEditingAddress(null);
+      setIsAddressFormOpen(false);
       event.currentTarget.reset();
       await loadAddresses();
     } catch (caughtError) {
@@ -181,14 +184,24 @@ export default function AddressesPage() {
 
   return (
     <UserShell>
-      <main className="customer-page">
-        <section className="dashboard-header">
+      <main className="customer-page account-settings-page">
+        <section className="dashboard-header account-settings-header">
           <div>
             <p className="eyebrow">Account</p>
-            <h1>Addresses</h1>
-            <p>Add, modify, and remove your saved addresses.</p>
+            <h1>
+              Saved <em>Addresses</em>
+            </h1>
           </div>
         </section>
+
+        <nav className="profile-tabs" aria-label="Profile sections">
+          <Link href="/profile">Profile</Link>
+          <Link href="/profile/security">Password</Link>
+          <Link href="/profile/sessions">Account Status</Link>
+          <Link className="active" href="/addresses">
+            Addresses
+          </Link>
+        </nav>
 
         {error ? <p className="form-error">{error}</p> : null}
         {success ? <p className="form-success">{success}</p> : null}
@@ -198,106 +211,244 @@ export default function AddressesPage() {
             active shipping zones and countries.
           </p>
         ) : null}
-        <section className="account-layout">
+        {isLoading ? (
+          <section className="empty-surface">
+            <h2>Loading addresses...</h2>
+          </section>
+        ) : !isAddressFormOpen ? (
+          <section className="address-overview">
+            <div className="profile-overview-heading">
+              <div>
+                <h2>Address book</h2>
+                <p>Review your saved shipping and billing addresses.</p>
+              </div>
+              <button
+                className="primary-button compact-button"
+                type="button"
+                onClick={() => {
+                  setEditingAddress(null);
+                  setError(null);
+                  setSuccess(null);
+                  setIsAddressFormOpen(true);
+                }}
+              >
+                Add Address
+              </button>
+            </div>
+
+            {addresses.length ? (
+              <div className="address-list address-overview-list">
+                {addresses.map((address) => (
+                  <article className="address-card" key={address.id}>
+                    <div>
+                      <h2>{address.label || "Address"}</h2>
+                      <p>
+                        {address.firstName} {address.lastName}
+                      </p>
+                      {address.company ? <p>{address.company}</p> : null}
+                      <p>{address.line1}</p>
+                      {address.line2 ? <p>{address.line2}</p> : null}
+                      <p>
+                        {address.city}
+                        {address.stateOrProvince
+                          ? `, ${address.stateOrProvince}`
+                          : ""}{" "}
+                        {address.postalCode}
+                      </p>
+                      <p>{address.countryCode}</p>
+                      {address.phone ? <p>{address.phone}</p> : null}
+                    </div>
+                    <div className="address-badges">
+                      {address.isDefaultShipping ? <span>Shipping</span> : null}
+                      {address.isDefaultBilling ? <span>Billing</span> : null}
+                    </div>
+                    <div className="form-actions">
+                      <button
+                        className="secondary-button compact-button"
+                        type="button"
+                        onClick={() => {
+                          setEditingAddress(address);
+                          setError(null);
+                          setSuccess(null);
+                          setIsAddressFormOpen(true);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="danger-button compact-button"
+                        type="button"
+                        disabled={deletingAddressId === address.id}
+                        onClick={() => void handleDelete(address.id)}
+                      >
+                        {deletingAddressId === address.id
+                          ? "Removing..."
+                          : "Remove"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <section className="empty-surface">
+                <h2>No addresses yet</h2>
+                <p>Add your first address before checkout.</p>
+              </section>
+            )}
+          </section>
+        ) : (
           <form
-            className="account-form"
+            className="account-form address-form"
             key={editingAddress?.id ?? "new-address"}
             onSubmit={handleSubmit}
           >
-            <h2>{editingAddress ? "Edit Address" : "Add Address"}</h2>
-            <label>
-              Label
-              <input name="label" defaultValue={formAddress.label ?? ""} />
-            </label>
-            <div className="split-fields">
+            <section className="account-setting-row">
+              <div>
+                <h2>{editingAddress ? "Edit address" : "Add address"}</h2>
+                <p>Save delivery details for faster checkout.</p>
+              </div>
               <label>
-                First name
-                <input
-                  name="firstName"
-                  defaultValue={formAddress.firstName}
-                  required
-                />
+                Label
+                <input name="label" defaultValue={formAddress.label ?? ""} />
               </label>
+            </section>
+            <section className="account-setting-row">
+              <div>
+                <h2>Contact name</h2>
+                <p>This name appears on shipping and billing details.</p>
+              </div>
+              <div className="split-fields">
+                <label>
+                  First name
+                  <input
+                    name="firstName"
+                    defaultValue={formAddress.firstName}
+                    required
+                  />
+                </label>
+                <label>
+                  Last name
+                  <input
+                    name="lastName"
+                    defaultValue={formAddress.lastName}
+                    required
+                  />
+                </label>
+              </div>
+            </section>
+            <section className="account-setting-row">
+              <div>
+                <h2>Street address</h2>
+                <p>Use the address where you can receive deliveries.</p>
+              </div>
+              <div className="address-field-grid">
+                <label>
+                  Company
+                  <input name="company" defaultValue={formAddress.company ?? ""} />
+                </label>
+                <label>
+                  Address line 1
+                  <input name="line1" defaultValue={formAddress.line1} required />
+                </label>
+                <label>
+                  Address line 2
+                  <input name="line2" defaultValue={formAddress.line2 ?? ""} />
+                </label>
+              </div>
+            </section>
+            <section className="account-setting-row">
+              <div>
+                <h2>Region</h2>
+                <p>Shipping availability is checked from this country.</p>
+              </div>
+              <div className="address-field-grid two-column">
+                <label>
+                  City
+                  <input name="city" defaultValue={formAddress.city} required />
+                </label>
+                <label>
+                  State
+                  <input
+                    name="stateOrProvince"
+                    defaultValue={formAddress.stateOrProvince ?? ""}
+                  />
+                </label>
+                <label>
+                  Postal code
+                  <input
+                    name="postalCode"
+                    defaultValue={formAddress.postalCode}
+                    required
+                  />
+                </label>
+                <label>
+                  Country code
+                  <select
+                    name="countryCode"
+                    defaultValue={formAddress.countryCode}
+                    required
+                  >
+                    <option value="">Select country</option>
+                    {shippingCountries.map((country) => (
+                      <option key={country.id} value={country.countryCode}>
+                        {country.countryName} ({country.countryCode})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+            <section className="account-setting-row">
+              <div>
+                <h2>Phone</h2>
+                <p>Optional phone number for courier updates.</p>
+              </div>
               <label>
-                Last name
-                <input
-                  name="lastName"
-                  defaultValue={formAddress.lastName}
-                  required
-                />
+                Phone
+                <input name="phone" defaultValue={formAddress.phone ?? ""} />
               </label>
-            </div>
-            <label>
-              Company
-              <input name="company" defaultValue={formAddress.company ?? ""} />
-            </label>
-            <label>
-              Address line 1
-              <input name="line1" defaultValue={formAddress.line1} required />
-            </label>
-            <label>
-              Address line 2
-              <input name="line2" defaultValue={formAddress.line2 ?? ""} />
-            </label>
-            <div className="split-fields">
-              <label>
-                City
-                <input name="city" defaultValue={formAddress.city} required />
-              </label>
-              <label>
-                State
-                <input
-                  name="stateOrProvince"
-                  defaultValue={formAddress.stateOrProvince ?? ""}
-                />
-              </label>
-            </div>
-            <div className="split-fields">
-              <label>
-                Postal code
-                <input
-                  name="postalCode"
-                  defaultValue={formAddress.postalCode}
-                  required
-                />
-              </label>
-              <label>
-                Country code
-                <select
-                  name="countryCode"
-                  defaultValue={formAddress.countryCode}
-                  required
+            </section>
+            <section className="account-setting-row">
+              <div>
+                <h2>Defaults</h2>
+                <p>Choose how this address is selected during checkout.</p>
+              </div>
+              <div className="account-checkbox-stack">
+                <label className="checkbox-field">
+                  <input
+                    name="isDefaultShipping"
+                    type="checkbox"
+                    defaultChecked={formAddress.isDefaultShipping}
+                  />
+                  Default shipping address
+                </label>
+                <label className="checkbox-field">
+                  <input
+                    name="isDefaultBilling"
+                    type="checkbox"
+                    defaultChecked={formAddress.isDefaultBilling}
+                  />
+                  Default billing address
+                </label>
+              </div>
+            </section>
+            <div className="account-form-actions">
+              {editingAddress ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    setEditingAddress(null);
+                    setIsAddressFormOpen(false);
+                  }}
                 >
-                  <option value="">Select country</option>
-                  {shippingCountries.map((country) => (
-                    <option key={country.id} value={country.countryCode}>
-                      {country.countryName} ({country.countryCode})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label>
-              Phone
-              <input name="phone" defaultValue={formAddress.phone ?? ""} />
-            </label>
-            <label className="checkbox-field">
-              <input
-                name="isDefaultShipping"
-                type="checkbox"
-                defaultChecked={formAddress.isDefaultShipping}
-              />
-              Default shipping address
-            </label>
-            <label className="checkbox-field">
-              <input
-                name="isDefaultBilling"
-                type="checkbox"
-                defaultChecked={formAddress.isDefaultBilling}
-              />
-              Default billing address
-            </label>
-            <div className="form-actions">
+                  Cancel
+                </button>
+              ) : (
+                <button className="secondary-button" type="reset">
+                  Reset
+                </button>
+              )}
               <button
                 className="primary-button"
                 type="submit"
@@ -309,75 +460,9 @@ export default function AddressesPage() {
                     ? "Update Address"
                     : "Add Address"}
               </button>
-              {editingAddress ? (
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => setEditingAddress(null)}
-                >
-                  Cancel
-                </button>
-              ) : null}
             </div>
           </form>
-
-          <div className="address-list">
-            {isLoading ? (
-              <section className="empty-surface">
-                <h2>Loading addresses...</h2>
-              </section>
-            ) : addresses.length ? (
-              addresses.map((address) => (
-                <article className="address-card" key={address.id}>
-                  <div>
-                    <h2>{address.label || "Address"}</h2>
-                    <p>
-                      {address.firstName} {address.lastName}
-                    </p>
-                    <p>{address.line1}</p>
-                    {address.line2 ? <p>{address.line2}</p> : null}
-                    <p>
-                      {address.city}
-                      {address.stateOrProvince
-                        ? `, ${address.stateOrProvince}`
-                        : ""}{" "}
-                      {address.postalCode}
-                    </p>
-                    <p>{address.countryCode}</p>
-                  </div>
-                  <div className="address-badges">
-                    {address.isDefaultShipping ? <span>Shipping</span> : null}
-                    {address.isDefaultBilling ? <span>Billing</span> : null}
-                  </div>
-                  <div className="form-actions">
-                    <button
-                      className="secondary-button compact-button"
-                      type="button"
-                      onClick={() => setEditingAddress(address)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="danger-button compact-button"
-                      type="button"
-                      disabled={deletingAddressId === address.id}
-                      onClick={() => void handleDelete(address.id)}
-                    >
-                      {deletingAddressId === address.id
-                        ? "Removing..."
-                        : "Remove"}
-                    </button>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <section className="empty-surface">
-                <h2>No addresses yet</h2>
-                <p>Add your first address with the form.</p>
-              </section>
-            )}
-          </div>
-        </section>
+        )}
       </main>
     </UserShell>
   );
