@@ -41,6 +41,27 @@ export type CustomerProductCategory = {
   isPrimary: boolean;
 };
 
+export type CustomerCategoryImage = {
+  id: string;
+  categoryId: string;
+  url: string;
+  altText: string | null;
+  sortOrder: number;
+  isPrimary: boolean;
+  width: number | null;
+  height: number | null;
+  format: string | null;
+};
+
+export type CustomerCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  parentId: string | null;
+  images?: CustomerCategoryImage[];
+};
+
 export type CustomerProductIngredient = {
   purpose: string | null;
   concentration: string | null;
@@ -394,6 +415,16 @@ export function getCustomerProducts() {
 
 export function getCustomerProduct(slug: string) {
   return apiRequest<CustomerProduct>(`/products/${slug}`);
+}
+
+export function getCustomerCategories() {
+  return apiRequest<CustomerCategory[]>("/categories");
+}
+
+export function getCustomerCategoryProducts(slug: string) {
+  return apiRequest<CustomerProduct[]>(
+    `/categories/${encodeURIComponent(slug)}/products`,
+  );
 }
 
 export function getCurrencies() {

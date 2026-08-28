@@ -248,6 +248,25 @@ export class CategoryService {
           },
         },
       },
+      include: {
+        images: {
+          where: {
+            deletedAt: null,
+            variantId: null,
+          },
+          orderBy: [
+            {
+              isPrimary: 'desc',
+            },
+            {
+              sortOrder: 'asc',
+            },
+            {
+              createdAt: 'asc',
+            },
+          ],
+        },
+      },
       orderBy: [
         {
           isFeatured: 'desc',

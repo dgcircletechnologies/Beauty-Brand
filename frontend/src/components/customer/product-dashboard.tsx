@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
@@ -72,6 +73,8 @@ function ProductImageSlider({
 }
 
 export function ProductDashboard() {
+  const searchParams = useSearchParams();
+  const categorySlug = searchParams.get("category");
   const { isAuthenticated, user } = useAuth();
   const [products, setProducts] = useState<customerApi.CustomerProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,8 +84,14 @@ export function ProductDashboard() {
     let isMounted = true;
 
     async function loadProducts() {
+      if (isMounted) {
+        setIsLoading(true);
+      }
+
       try {
-        const nextProducts = await customerApi.getCustomerProducts();
+        const nextProducts = categorySlug
+          ? await customerApi.getCustomerCategoryProducts(categorySlug)
+          : await customerApi.getCustomerProducts();
 
         if (isMounted) {
           setProducts(nextProducts);
@@ -108,7 +117,7 @@ export function ProductDashboard() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [categorySlug]);
 
   const featuredCount = useMemo(
     () => products.filter((product) => product.isFeatured).length,
@@ -120,7 +129,7 @@ export function ProductDashboard() {
       <section className="customer-hero">
         <div>
           <p className="eyebrow">Customer Dashboard</p>
-          <h1>Shop skincare products</h1>
+          <h1>{categorySlug ? "Shop selected category" : "Shop skincare products"}</h1>
           <p>
             {isAuthenticated
               ? `Welcome${user?.firstName ? `, ${user.firstName}` : ""}. Add a product to test your cart.`
