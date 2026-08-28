@@ -72,7 +72,6 @@ function ProductImageSlider({
   const [isHovering, setIsHovering] = useState(false);
   const touchStartXRef = useRef<number | null>(null);
   const didSwipeRef = useRef(false);
-  const activeImage = images[activeIndex];
 
   useEffect(() => {
     setActiveIndex(0);
@@ -85,12 +84,12 @@ function ProductImageSlider({
 
     const intervalId = window.setInterval(() => {
       setActiveIndex((current) => (current + 1) % images.length);
-    }, 900);
+    }, 1800);
 
     return () => window.clearInterval(intervalId);
   }, [images.length, isHovering]);
 
-  if (!activeImage) {
+  if (!images.length) {
     return <div className="shop-product-image-placeholder" />;
   }
 
@@ -157,11 +156,18 @@ function ProductImageSlider({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <img
-        alt={activeImage.altText ?? productName}
-        key={activeImage.id}
-        src={activeImage.url}
-      />
+      <div
+        className="shop-product-image-track"
+        style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+      >
+        {images.map((image) => (
+          <img
+            alt={image.altText ?? productName}
+            key={image.id}
+            src={image.url}
+          />
+        ))}
+      </div>
     </div>
   );
 }

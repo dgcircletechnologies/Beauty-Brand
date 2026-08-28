@@ -1,0 +1,220 @@
+name: Skincare CI/CD
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: skincare-production
+  cancel-in-progress: false
+
+jobs:
+  # ============================================
+  # CI - Verify Docker images build
+  # ============================================
+  ci:
+    name: CI - Build Docker Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          target: production
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          target: production
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================
+  # CD - Deploy to Hostinger VPS
+  # ============================================
+  deploy:
+    name: CD - Deploy to Hostinger
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_PORT" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "VPS_HOST, VPS_USER, VPS_PORT, and VPS_SSH_KEY secrets are required."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/skincare
+          chmod 600 ~/.ssh/skincare
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy application
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          BACKEND_PORT: ${{ secrets.BACKEND_PORT }}
+          FRONTEND_PORT: ${{ secrets.FRONTEND_PORT }}
+          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+          APP_FRONTEND_URL: ${{ secrets.APP_FRONTEND_URL }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          API_INTERNAL_BASE_URL: ${{ secrets.API_INTERNAL_BASE_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          REFRESH_TOKEN_HASH_SECRET: ${{ secrets.REFRESH_TOKEN_HASH_SECRET }}
+          ONE_TIME_TOKEN_HASH_SECRET: ${{ secrets.ONE_TIME_TOKEN_HASH_SECRET }}
+          JWT_ACCESS_EXPIRES_IN_SECONDS: ${{ secrets.JWT_ACCESS_EXPIRES_IN_SECONDS }}
+          JWT_REFRESH_EXPIRES_IN_SECONDS: ${{ secrets.JWT_REFRESH_EXPIRES_IN_SECONDS }}
+          EMAIL_VERIFICATION_EXPIRES_IN_MINUTES: ${{ secrets.EMAIL_VERIFICATION_EXPIRES_IN_MINUTES }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          SUPPORT_EMAIL: ${{ secrets.SUPPORT_EMAIL }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          CLOUDINARY_PRODUCT_FOLDER: ${{ secrets.CLOUDINARY_PRODUCT_FOLDER }}
+          CLOUDINARY_CATEGORY_FOLDER: ${{ secrets.CLOUDINARY_CATEGORY_FOLDER }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_PORT" ]; then
+            echo "VPS_HOST, VPS_USER, and VPS_PORT secrets are required."
+            exit 1
+          fi
+
+          missing_app_secrets=""
+          for secret_name in \
+            POSTGRES_PASSWORD \
+            JWT_ACCESS_SECRET \
+            JWT_REFRESH_SECRET \
+            SMTP_HOST \
+            SMTP_USER \
+            SMTP_PASS \
+            CLOUDINARY_CLOUD_NAME \
+            CLOUDINARY_API_KEY \
+            CLOUDINARY_API_SECRET
+          do
+            if [ -z "${!secret_name}" ]; then
+              missing_app_secrets="$missing_app_secrets $secret_name"
+            fi
+          done
+
+          if [ -n "$missing_app_secrets" ]; then
+            echo "Missing required production secrets:$missing_app_secrets"
+            exit 1
+          fi
+
+          APP_DIR="${VPS_APP_DIR:-/root/skincare}"
+
+          tar \
+            --exclude='.git' \
+            --exclude='backend/node_modules' \
+            --exclude='frontend/node_modules' \
+            --exclude='backend/dist' \
+            --exclude='frontend/.next' \
+            -czf /tmp/skincare.source.tar.gz \
+            .
+
+          cat > /tmp/skincare.production.env <<EOF
+POSTGRES_USER=${POSTGRES_USER:-skincare}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+POSTGRES_DB=${POSTGRES_DB:-skincare_db}
+POSTGRES_PORT=${POSTGRES_PORT:-5433}
+BACKEND_PORT=${BACKEND_PORT:-4000}
+FRONTEND_PORT=${FRONTEND_PORT:-5001}
+CORS_ORIGIN=${CORS_ORIGIN}
+APP_FRONTEND_URL=${APP_FRONTEND_URL}
+NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-/api/v1}
+API_INTERNAL_BASE_URL=${API_INTERNAL_BASE_URL:-http://backend:3000/api/v1}
+JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+REFRESH_TOKEN_HASH_SECRET=${REFRESH_TOKEN_HASH_SECRET}
+ONE_TIME_TOKEN_HASH_SECRET=${ONE_TIME_TOKEN_HASH_SECRET}
+JWT_ACCESS_EXPIRES_IN_SECONDS=${JWT_ACCESS_EXPIRES_IN_SECONDS:-900}
+JWT_REFRESH_EXPIRES_IN_SECONDS=${JWT_REFRESH_EXPIRES_IN_SECONDS:-604800}
+EMAIL_VERIFICATION_EXPIRES_IN_MINUTES=${EMAIL_VERIFICATION_EXPIRES_IN_MINUTES:-60}
+SMTP_HOST=${SMTP_HOST}
+SMTP_PORT=${SMTP_PORT:-587}
+SMTP_USER=${SMTP_USER}
+SMTP_PASS=${SMTP_PASS}
+SMTP_FROM=${SMTP_FROM}
+SUPPORT_EMAIL=${SUPPORT_EMAIL}
+CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+CLOUDINARY_PRODUCT_FOLDER=${CLOUDINARY_PRODUCT_FOLDER:-bluewave/products}
+CLOUDINARY_CATEGORY_FOLDER=${CLOUDINARY_CATEGORY_FOLDER:-bluewave/categories}
+RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+EOF
+
+          ssh \
+            -i ~/.ssh/skincare \
+            -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST" \
+            "mkdir -p '$APP_DIR'"
+
+          scp \
+            -i ~/.ssh/skincare \
+            -P "$VPS_PORT" \
+            /tmp/skincare.source.tar.gz \
+            "$VPS_USER@$VPS_HOST:$APP_DIR/source.tar.gz"
+
+          scp \
+            -i ~/.ssh/skincare \
+            -P "$VPS_PORT" \
+            /tmp/skincare.production.env \
+            "$VPS_USER@$VPS_HOST:$APP_DIR/.env"
+
+          ssh \
+            -i ~/.ssh/skincare \
+            -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST" "APP_DIR='$APP_DIR' bash -s" << 'DEPLOY'
+          set -e
+          echo "===== Starting deployment ====="
+          cd "$APP_DIR"
+          echo "===== Unpack latest source ====="
+          tar -xzf source.tar.gz
+          rm -f source.tar.gz
+          echo "===== Build & recreate containers ====="
+          docker compose -f docker-compose.prod.yml build
+          docker compose -f docker-compose.prod.yml up -d
+          echo "===== Clean up dangling images ====="
+          docker image prune -f
+          echo "===== Deployment successful ====="
+          DEPLOY

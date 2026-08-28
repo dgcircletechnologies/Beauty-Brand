@@ -286,6 +286,14 @@ export class ProductService {
       });
     }
 
+    if (query.excludeProductId?.trim()) {
+      andFilters.push({
+        id: {
+          not: query.excludeProductId.trim(),
+        },
+      });
+    }
+
     if (categorySlugs.length) {
       andFilters.push({
         categories: {
@@ -892,6 +900,17 @@ export class ProductService {
         where: {
           deletedAt: null,
           isActive: true,
+        },
+        include: {
+          attributeValues: {
+            include: {
+              attribute: true,
+              option: true,
+            },
+            orderBy: {
+              createdAt: 'asc' as const,
+            },
+          },
         },
         orderBy: {
           createdAt: 'desc' as const,

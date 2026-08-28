@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
+
+const detailTabs = ["About", "How to Use", "Ingredients", "Attributes"] as const;
+type DetailTab = (typeof detailTabs)[number];
 
 function getAttributeValue(value: customerApi.CustomerProductAttributeValue) {
   if (value.option) {
@@ -27,11 +30,55 @@ function getAttributeValue(value: customerApi.CustomerProductAttributeValue) {
   return "Not specified";
 }
 
-function MetadataList({
-  items,
-  title,
+function getPrimaryPrice(product: customerApi.CustomerProduct) {
+  return product.variants?.[0]?.price ?? "0";
+}
+
+function uniqueImagesById(images: customerApi.CustomerProductImage[]) {
+  const seenImageIds = new Set<string>();
+
+  return images.filter((image) => {
+    if (seenImageIds.has(image.id)) {
+      return false;
+    }
+
+    seenImageIds.add(image.id);
+    return true;
+  });
+}
+
+function ProductCard({
+  product,
+  formatPrice,
 }: {
-  title: string;
+  product: customerApi.CustomerProduct;
+  formatPrice: (amount: string | number) => string;
+}) {
+  const image = product.images?.[0];
+
+  return (
+    <article className="shop-product-card">
+      <Link className="related-product-image" href={`/products/${product.slug}`}>
+        {image ? (
+          <img alt={image.altText ?? product.name} src={image.url} />
+        ) : (
+          <div className="shop-product-image-placeholder" />
+        )}
+      </Link>
+      <div>
+        <p>{product.categories?.[0]?.category.name ?? "Skincare"}</p>
+        <h2>
+          <Link href={`/products/${product.slug}`}>{product.name}</Link>
+        </h2>
+        <span>{formatPrice(getPrimaryPrice(product))}</span>
+      </div>
+    </article>
+  );
+}
+
+function ChipList({
+  items,
+}: {
   items: customerApi.CustomerMetadataItem[];
 }) {
   if (!items.length) {
@@ -39,43 +86,72 @@ function MetadataList({
   }
 
   return (
-    <section className="product-detail-section">
-      <h2>{title}</h2>
-      <div className="detail-chip-list">
-        {items.map((item) => (
-          <article className="detail-chip" key={item.id}>
-            <h3>{item.name}</h3>
-            {item.description ? <p>{item.description}</p> : null}
-          </article>
-        ))}
-      </div>
-    </section>
+    <div className="product-detail-chip-list">
+      {items.map((item) => (
+        <span key={item.id}>{item.name}</span>
+      ))}
+    </div>
+  );
+}
+
+function AttributeRows({
+  items,
+}: {
+  items: customerApi.CustomerProductAttributeValue[];
+}) {
+  return (
+    <div className="detail-table">
+      {items.map((value, index) => (
+        <div
+          className="detail-table-row"
+          key={`${value.attribute.id}-${value.id}-${index}`}
+        >
+          <span>{value.attribute.name}</span>
+          <strong>{getAttributeValue(value)}</strong>
+        </div>
+      ))}
+    </div>
   );
 }
 
 export function ProductDetail({ slug }: { slug: string }) {
-  const { accessToken, isAuthenticated } = useAuth();
+  const { accessToken } = useAuth();
   const { formatPrice } = useCurrency();
   const [product, setProduct] = useState<customerApi.CustomerProduct | null>(
     null,
   );
+  const [relatedResponse, setRelatedResponse] =
+    useState<customerApi.CustomerShopProductsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRelatedLoading, setIsRelatedLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [addingVariantId, setAddingVariantId] = useState<string | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     null,
   );
+  const [quantity, setQuantity] = useState(1);
+  const [activeTab, setActiveTab] = useState<DetailTab>("About");
+  const [relatedPage, setRelatedPage] = useState(1);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadProduct() {
+      setIsLoading(true);
+      setRelatedPage(1);
+
       try {
         const nextProduct = await customerApi.getCustomerProduct(slug);
+        const firstAvailableVariant =
+          nextProduct.variants?.find((variant) => variant.stockQuantity > 0) ??
+          nextProduct.variants?.[0] ??
+          null;
 
         if (isMounted) {
           setProduct(nextProduct);
+          setSelectedVariantId(firstAvailableVariant?.id ?? null);
+          setQuantity(1);
           setError(null);
         }
       } catch (caughtError) {
@@ -100,28 +176,113 @@ export function ProductDetail({ slug }: { slug: string }) {
     };
   }, [slug]);
 
-  async function addVariantToCart(variant: customerApi.CustomerProductVariant) {
-    if (!accessToken) {
-      setSuccess(null);
-      setError("Please login before adding variants to cart.");
+  const selectedVariant = useMemo(() => {
+    if (!product?.variants?.length) {
+      return null;
+    }
+
+    return (
+      product.variants.find((variant) => variant.id === selectedVariantId) ??
+      product.variants[0]
+    );
+  }, [product, selectedVariantId]);
+
+  const primaryCategory = useMemo(() => {
+    if (!product?.categories?.length) {
+      return null;
+    }
+
+    return (
+      product.categories.find((item) => item.isPrimary)?.category ??
+      product.categories[0].category
+    );
+  }, [product]);
+
+  const selectedVariantImages = useMemo(
+    () => selectedVariant?.images ?? [],
+    [selectedVariant?.images],
+  );
+  const productImages = useMemo(() => product?.images ?? [], [product?.images]);
+  const galleryImages = useMemo(
+    () => uniqueImagesById([...selectedVariantImages, ...productImages]),
+    [productImages, selectedVariantImages],
+  );
+
+  const metadataHighlights = useMemo(() => {
+    const skinTypes = product?.skinTypes?.map((item) => item.skinType) ?? [];
+    const concerns = product?.concerns?.map((item) => item.concern) ?? [];
+    const benefits =
+      product?.productBenefits?.map((item) => item.benefit) ?? [];
+
+    return [...skinTypes, ...concerns, ...benefits].slice(0, 8);
+  }, [product]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadRelatedProducts() {
+      if (!product?.id || !primaryCategory?.slug) {
+        setRelatedResponse(null);
+        return;
+      }
+
+      const relatedCategorySlug = primaryCategory.slug;
+      const currentProductId = product.id;
+
+      setIsRelatedLoading(true);
+
+      try {
+        const response = await customerApi.getCustomerShopProducts({
+          category: [relatedCategorySlug],
+          excludeProductId: currentProductId,
+          page: String(relatedPage),
+          pageSize: "4",
+          sort: "featured",
+        });
+
+        if (isMounted) {
+          setRelatedResponse(response);
+        }
+      } finally {
+        if (isMounted) {
+          setIsRelatedLoading(false);
+        }
+      }
+    }
+
+    void loadRelatedProducts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [primaryCategory?.slug, product?.id, relatedPage]);
+
+  async function addSelectedVariantToCart() {
+    if (!selectedVariant || !product) {
       return;
     }
 
-    setAddingVariantId(variant.id);
+    if (!accessToken) {
+      setSuccess(null);
+      setError("Please login before adding this product to cart.");
+      return;
+    }
+
+    setAddingVariantId(selectedVariant.id);
     setError(null);
     setSuccess(null);
 
     try {
       await customerApi.addCartItem(accessToken, {
-        variantId: variant.id,
-        quantity: 1,
+        variantId: selectedVariant.id,
+        quantity,
       });
-      setSuccess(`${product?.name ?? "Product"} variant added to cart.`);
+      setSuccess(`${product.name} added to cart.`);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to add variant to cart",
+          : "Unable to add product to cart",
       );
     } finally {
       setAddingVariantId(null);
@@ -130,7 +291,7 @@ export function ProductDetail({ slug }: { slug: string }) {
 
   if (isLoading) {
     return (
-      <main className="customer-page">
+      <main className="product-template-page">
         <section className="empty-surface">
           <h1>Loading product...</h1>
         </section>
@@ -140,200 +301,372 @@ export function ProductDetail({ slug }: { slug: string }) {
 
   if (!product) {
     return (
-      <main className="customer-page">
+      <main className="product-template-page">
         <section className="empty-surface">
           <h1>Product not found</h1>
           {error ? <p className="form-error">{error}</p> : null}
-          <Link className="secondary-link-button" href="/">
-            Back to Products
+          <Link className="secondary-link-button" href="/shop">
+            Back to Shop
           </Link>
         </section>
       </main>
     );
   }
 
-  const categories =
-    product.categories?.map((item) => ({
-      ...item.category,
-      name: item.isPrimary
-        ? `${item.category.name} (Primary)`
-        : item.category.name,
-    })) ?? [];
-  const audiences = product.audiences?.map((item) => item.audience) ?? [];
-  const skinTypes = product.skinTypes?.map((item) => item.skinType) ?? [];
-  const ageGroups = product.ageGroups?.map((item) => item.ageGroup) ?? [];
-  const hairProfiles =
-    product.hairProfiles?.map((item) => item.hairProfile) ?? [];
-  const concerns = product.concerns?.map((item) => item.concern) ?? [];
-  const benefits = product.productBenefits?.map((item) => item.benefit) ?? [];
-  const selectedVariant = product.variants?.find(
-    (variant) => variant.id === selectedVariantId,
+  const stockQuantity = selectedVariant?.stockQuantity ?? 0;
+  const isAvailable = Boolean(selectedVariant?.isActive && stockQuantity > 0);
+  const compareAtPrice = selectedVariant?.compareAtPrice;
+  const productAttributes = product.attributeValues ?? [];
+  const variantAttributes = selectedVariant?.attributeValues ?? [];
+  const combinedAttributes = [...productAttributes, ...variantAttributes];
+  const variantAttributeDescriptions = variantAttributes.filter(
+    (value) => value.attribute.description,
   );
-  const galleryImages = selectedVariant?.images?.length
-    ? selectedVariant.images
-    : product.images ?? [];
+  const relatedProducts = relatedResponse?.items ?? [];
+  const relatedPagination = relatedResponse?.pagination;
 
   return (
-    <main className="customer-page">
-      <section className="product-detail-hero">
-        <div>
-          <p className="eyebrow">Product Details</p>
+    <main className="product-template-page">
+      <nav className="shop-breadcrumb">
+        <Link href="/">Home</Link>
+        <span>/</span>
+        <Link href="/shop">Shop</Link>
+        {primaryCategory ? (
+          <>
+            <span>/</span>
+            <Link href={`/shop?category=${primaryCategory.slug}`}>
+              {primaryCategory.name}
+            </Link>
+          </>
+        ) : null}
+      </nav>
+
+      <section className="product-template-layout">
+        <div className="product-template-gallery">
+          {selectedVariantImages.length ? (
+            <div className="product-gallery-note">
+              Showing {selectedVariant?.sku} images with product images
+            </div>
+          ) : null}
+          {galleryImages.length ? (
+            galleryImages.map((image, index) => (
+              <button
+                aria-label={`View ${product.name} image ${index + 1}`}
+                className={index % 3 === 0 ? "wide" : undefined}
+                key={image.id}
+                type="button"
+              >
+                <img alt={image.altText ?? product.name} src={image.url} />
+              </button>
+            ))
+          ) : (
+            <div className="product-template-image-placeholder" />
+          )}
+        </div>
+
+        <aside className="product-template-summary">
+          <p className="eyebrow">{primaryCategory?.name ?? "Skincare"}</p>
           <h1>{product.name}</h1>
           <p>{product.shortDescription || "Skincare product"}</p>
-        </div>
-        <Link className="secondary-link-button" href="/">
-          Back to Products
-        </Link>
-      </section>
 
-      {galleryImages.length ? (
-        <section className="product-detail-section">
-          <h2>Images</h2>
-          <div className="customer-product-gallery">
-            {galleryImages.map((image) => (
-              <img
-                alt={image.altText ?? product.name}
-                key={image.id}
-                src={image.url}
-              />
-            ))}
+          <div className="product-template-price">
+            <strong>{formatPrice(selectedVariant?.price ?? "0")}</strong>
+            {compareAtPrice ? <span>{formatPrice(compareAtPrice)}</span> : null}
           </div>
-        </section>
-      ) : null}
 
-      {product.description ? (
-        <section className="product-detail-section">
-          <h2>Details</h2>
-          <p>{product.description}</p>
-        </section>
-      ) : null}
+          {product.variants?.length ? (
+            <section className="product-template-options">
+              <h2>Variant</h2>
+              <div className="product-variant-options">
+                {product.variants.map((variant) => {
+                  const variantAvailable =
+                    variant.isActive && variant.stockQuantity > 0;
 
-      {product.usageInstructions || product.warnings ? (
-        <section className="product-detail-section">
-          <h2>Usage and Warnings</h2>
-          {product.usageInstructions ? (
-            <p>
-              <strong>Usage:</strong> {product.usageInstructions}
-            </p>
-          ) : null}
-          {product.warnings ? (
-            <p>
-              <strong>Warnings:</strong> {product.warnings}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      <MetadataList title="Categories" items={categories} />
-
-      {product.ingredients?.length ? (
-        <section className="product-detail-section">
-          <h2>Ingredients</h2>
-          <div className="detail-chip-list">
-            {product.ingredients.map((item) => (
-              <article className="detail-chip" key={item.ingredient.id}>
-                <h3>
-                  {item.ingredient.name}
-                  {item.isKeyIngredient ? " (Key)" : ""}
-                </h3>
-                {item.ingredient.inciName ? (
-                  <p>INCI: {item.ingredient.inciName}</p>
-                ) : null}
-                {item.purpose ? <p>Purpose: {item.purpose}</p> : null}
-                {item.concentration ? (
-                  <p>Concentration: {item.concentration}</p>
-                ) : null}
-                {item.ingredient.description ? (
-                  <p>{item.ingredient.description}</p>
-                ) : null}
-                {item.ingredient.benefits ? (
-                  <p>Benefits: {item.ingredient.benefits}</p>
-                ) : null}
-                {item.ingredient.warnings ? (
-                  <p>Warnings: {item.ingredient.warnings}</p>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      <MetadataList title="Audience" items={audiences} />
-      <MetadataList title="Skin Types" items={skinTypes} />
-      <MetadataList title="Age Groups" items={ageGroups} />
-      <MetadataList title="Hair Profiles" items={hairProfiles} />
-      <MetadataList title="Concerns" items={concerns} />
-      <MetadataList title="Benefits" items={benefits} />
-
-      {product.attributeValues?.length ? (
-        <section className="product-detail-section">
-          <h2>Attributes</h2>
-          <div className="detail-table">
-            {product.attributeValues.map((value) => (
-              <div className="detail-table-row" key={value.id}>
-                <span>{value.attribute.name}</span>
-                <strong>{getAttributeValue(value)}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {success ? <p className="form-success">{success}</p> : null}
-      {error ? <p className="form-error">{error}</p> : null}
-
-      <section className="product-detail-section">
-        <h2>Variants</h2>
-        {product.variants?.length ? (
-          <div className="variant-list">
-            {product.variants.map((variant) => {
-              const isAvailable = variant.isActive && variant.stockQuantity > 0;
-
-              return (
-                <article className="customer-variant-row" key={variant.id}>
-                  <div>
-                    <h3>{variant.sku}</h3>
-                    <p>
-                      {isAvailable
-                        ? `${variant.stockQuantity} in stock`
-                        : "Out of stock"}
-                    </p>
-                  </div>
-                  <strong>{formatPrice(variant.price)}</strong>
-                  <button
-                    className="secondary-button compact-button"
-                    type="button"
-                    onClick={() => setSelectedVariantId(variant.id)}
-                  >
-                    View Images
-                  </button>
-                  {isAuthenticated ? (
+                  return (
                     <button
-                      className="primary-button compact-button"
+                      className={
+                        variant.id === selectedVariant?.id ? "selected" : undefined
+                      }
+                      key={variant.id}
                       type="button"
-                      disabled={!isAvailable || addingVariantId === variant.id}
-                      onClick={() => void addVariantToCart(variant)}
+                      onClick={() => {
+                        setSelectedVariantId(variant.id);
+                        setQuantity(1);
+                        setSuccess(null);
+                        setError(null);
+                      }}
                     >
-                      {addingVariantId === variant.id
-                        ? "Adding..."
-                        : "Add Variant"}
+                      <span>{variant.sku}</span>
+                      <strong>{formatPrice(variant.price)}</strong>
+                      <small>
+                        {variantAvailable
+                          ? `${variant.stockQuantity} in stock`
+                          : "Out of stock"}
+                      </small>
                     </button>
-                  ) : (
-                    <Link
-                      className="primary-link-button compact-button"
-                      href="/login"
-                    >
-                      Login to Add
-                    </Link>
-                  )}
-                </article>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          <ChipList items={metadataHighlights} />
+
+          {variantAttributes.length ? (
+            <div className="product-selected-values">
+              {variantAttributes.map((value) => (
+                <div key={value.id}>
+                  <span>{value.attribute.name}</span>
+                  <strong>{getAttributeValue(value)}</strong>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="product-purchase-row">
+            <div className="quantity-controls product-quantity-controls">
+              <button
+                aria-label="Decrease quantity"
+                disabled={quantity <= 1}
+                type="button"
+                onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+              >
+                -
+              </button>
+              <span>{quantity}</span>
+              <button
+                aria-label="Increase quantity"
+                disabled={!isAvailable || quantity >= stockQuantity}
+                type="button"
+                onClick={() =>
+                  setQuantity((current) =>
+                    Math.min(stockQuantity || 1, current + 1),
+                  )
+                }
+              >
+                +
+              </button>
+            </div>
+
+            {accessToken ? (
+              <button
+                className="primary-button"
+                disabled={
+                  !selectedVariant ||
+                  !isAvailable ||
+                  addingVariantId === selectedVariant.id
+                }
+                type="button"
+                onClick={() => void addSelectedVariantToCart()}
+              >
+                {addingVariantId === selectedVariant?.id
+                  ? "Adding..."
+                  : "Add to Cart"}
+              </button>
+            ) : (
+              <Link className="primary-link-button" href="/login">
+                Login to Add
+              </Link>
+            )}
           </div>
-        ) : (
-          <p>No variants are available for this product yet.</p>
-        )}
+
+          {success ? <p className="form-success">{success}</p> : null}
+          {error ? <p className="form-error">{error}</p> : null}
+        </aside>
       </section>
+
+      <section className="product-about-block">
+        <h2>
+          <span>All about the</span>
+          <em>Product</em>
+        </h2>
+
+        <div className="product-tab-list" role="tablist">
+          {detailTabs.map((tab) => (
+            <button
+              aria-selected={activeTab === tab}
+              className={activeTab === tab ? "active" : undefined}
+              key={tab}
+              role="tab"
+              type="button"
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="product-tab-panel">
+          {activeTab === "About" ? (
+            <div className="product-detail-content-grid">
+              {galleryImages[0] ? (
+                <img
+                  alt={galleryImages[0].altText ?? product.name}
+                  src={galleryImages[0].url}
+                />
+              ) : null}
+              <div>
+                <div className="product-about-copy">
+                  <p>{product.description || product.shortDescription}</p>
+                  {variantAttributes.length ? (
+                    <p>
+                      {variantAttributes
+                        .map(
+                          (value) =>
+                            `${value.attribute.name}: ${getAttributeValue(value)}`,
+                        )
+                        .join(". ")}
+                    </p>
+                  ) : null}
+                </div>
+                {variantAttributeDescriptions.length ? (
+                  <div className="detail-chip-list">
+                    {variantAttributeDescriptions.map((value) => (
+                      <article className="detail-chip" key={value.id}>
+                        <h3>{value.attribute.name}</h3>
+                        <p>{value.attribute.description}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="detail-chip-list">
+                  {(product.categories ?? []).map((item) => (
+                    <article className="detail-chip" key={item.category.id}>
+                      <h3>{item.category.name}</h3>
+                      {item.category.description ? (
+                        <p>{item.category.description}</p>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === "How to Use" ? (
+            <div className="product-detail-copy">
+              {product.usageInstructions ? (
+                <p>{product.usageInstructions}</p>
+              ) : (
+                <p>Usage instructions are not available for this product yet.</p>
+              )}
+              {product.warnings ? (
+                <p>
+                  <strong>Warnings:</strong> {product.warnings}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {activeTab === "Ingredients" ? (
+            product.ingredients?.length ? (
+              <div className="detail-chip-list">
+                {product.ingredients.map((item) => (
+                  <article className="detail-chip" key={item.ingredient.id}>
+                    <h3>
+                      {item.ingredient.name}
+                      {item.isKeyIngredient ? " (Key)" : ""}
+                    </h3>
+                    {item.ingredient.inciName ? (
+                      <p>INCI: {item.ingredient.inciName}</p>
+                    ) : null}
+                    {item.purpose ? <p>Purpose: {item.purpose}</p> : null}
+                    {item.concentration ? (
+                      <p>Concentration: {item.concentration}</p>
+                    ) : null}
+                    {item.ingredient.description ? (
+                      <p>{item.ingredient.description}</p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p>No ingredients are available for this product yet.</p>
+            )
+          ) : null}
+
+          {activeTab === "Attributes" ? (
+            combinedAttributes.length ? (
+              <AttributeRows items={combinedAttributes} />
+            ) : (
+              <p>No product attributes are available yet.</p>
+            )
+          ) : null}
+        </div>
+      </section>
+
+      {primaryCategory ? (
+        <section className="product-related-section">
+          <div className="product-related-heading">
+            <h2>
+              Take
+              <br />
+              <em>another look</em>
+            </h2>
+            <Link href={`/shop?category=${primaryCategory.slug}`}>
+              View category
+            </Link>
+          </div>
+
+          {isRelatedLoading ? (
+            <section className="empty-surface">
+              <h2>Loading related products...</h2>
+            </section>
+          ) : relatedProducts.length ? (
+            <>
+              <div className="shop-product-grid">
+                {relatedProducts.map((relatedProduct) => (
+                  <ProductCard
+                    formatPrice={formatPrice}
+                    key={relatedProduct.id}
+                    product={relatedProduct}
+                  />
+                ))}
+              </div>
+
+              {relatedPagination && relatedPagination.totalPages > 1 ? (
+                <nav className="shop-pagination" aria-label="Related products">
+                  <button
+                    disabled={!relatedPagination.hasPreviousPage}
+                    type="button"
+                    onClick={() => setRelatedPage(relatedPagination.page - 1)}
+                  >
+                    Previous
+                  </button>
+                  {Array.from(
+                    { length: relatedPagination.totalPages },
+                    (_, index) => (
+                      <button
+                        className={
+                          relatedPagination.page === index + 1
+                            ? "active"
+                            : undefined
+                        }
+                        key={index + 1}
+                        type="button"
+                        onClick={() => setRelatedPage(index + 1)}
+                      >
+                        {index + 1}
+                      </button>
+                    ),
+                  )}
+                  <button
+                    disabled={!relatedPagination.hasNextPage}
+                    type="button"
+                    onClick={() => setRelatedPage(relatedPagination.page + 1)}
+                  >
+                    Next
+                  </button>
+                </nav>
+              ) : null}
+            </>
+          ) : (
+            <section className="empty-surface">
+              <h2>No related products found</h2>
+            </section>
+          )}
+        </section>
+      ) : null}
     </main>
   );
 }

@@ -11,6 +11,7 @@ export type CustomerProductVariant = {
   stockQuantity: number;
   isActive: boolean;
   images?: CustomerProductImage[];
+  attributeValues?: CustomerProductAttributeValue[];
 };
 
 export type CustomerProductImage = {
@@ -159,6 +160,7 @@ export type CustomerShopProductParams = {
   sort?: string;
   page?: string;
   pageSize?: string;
+  excludeProductId?: string;
 };
 
 export type CustomerCurrency = {
@@ -502,6 +504,10 @@ export function getCustomerShopProducts(options: CustomerShopProductParams = {})
 
   if (options.pageSize) {
     params.set("pageSize", options.pageSize);
+  }
+
+  if (options.excludeProductId) {
+    params.set("excludeProductId", options.excludeProductId);
   }
 
   const query = params.toString();

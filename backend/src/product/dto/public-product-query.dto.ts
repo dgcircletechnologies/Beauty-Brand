@@ -48,4 +48,8 @@ export class PublicProductQueryDto {
   @IsOptional()
   @IsString()
   pageSize?: string;
+
+  @IsOptional()
+  @IsString()
+  excludeProductId?: string;
 }

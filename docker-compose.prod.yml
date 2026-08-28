@@ -5,10 +5,12 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-skincare}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skincare}
       POSTGRES_DB: ${POSTGRES_DB:-skincare_db}
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-skincare} -d ${POSTGRES_DB:-skincare_db}"]
       interval: 10s
@@ -25,14 +27,32 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOST: 0.0.0.0
-      DATABASE_URL: postgresql://${POSTGRES_USER:-skincare}:${POSTGRES_PASSWORD:-change_me}@postgres:5432/${POSTGRES_DB:-skincare_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-skincare}:${POSTGRES_PASSWORD:-skincare}@postgres:5432/${POSTGRES_DB:-skincare_db}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5000}
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
       APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:5000}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      REFRESH_TOKEN_HASH_SECRET: ${REFRESH_TOKEN_HASH_SECRET:-}
+      ONE_TIME_TOKEN_HASH_SECRET: ${ONE_TIME_TOKEN_HASH_SECRET:-}
+      JWT_ACCESS_EXPIRES_IN_SECONDS: ${JWT_ACCESS_EXPIRES_IN_SECONDS:-900}
+      JWT_REFRESH_EXPIRES_IN_SECONDS: ${JWT_REFRESH_EXPIRES_IN_SECONDS:-604800}
+      EMAIL_VERIFICATION_EXPIRES_IN_MINUTES: ${EMAIL_VERIFICATION_EXPIRES_IN_MINUTES:-60}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
+      SMTP_PASS: ${SMTP_PASS:?SMTP_PASS is required}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?CLOUDINARY_CLOUD_NAME is required}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:?CLOUDINARY_API_KEY is required}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:?CLOUDINARY_API_SECRET is required}
+      CLOUDINARY_PRODUCT_FOLDER: ${CLOUDINARY_PRODUCT_FOLDER:-bluewave/products}
+      CLOUDINARY_CATEGORY_FOLDER: ${CLOUDINARY_CATEGORY_FOLDER:-bluewave/categories}
     ports:
-      - "${BACKEND_PORT:-3000}:3000"
+      - "${BACKEND_PORT:-4000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,7 +68,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api/v1}
       API_INTERNAL_BASE_URL: ${API_INTERNAL_BASE_URL:-http://backend:3000/api/v1}
     ports:
-      - "${FRONTEND_PORT:-5000}:3000"
+      - "${FRONTEND_PORT:-5001}:3000"
     depends_on:
       - backend
 

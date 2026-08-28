@@ -314,7 +314,7 @@ export function UserNavbar() {
               >
                 {currencies.map((currency) => (
                   <option value={currency.code} key={currency.code}>
-                    {currency.symbol ? `${currency.symbol} ` : ""}
+                    {/* {currency.symbol ? `${currency.symbol} ` : ""} */}
                     {currency.code}
                   </option>
                 ))}
