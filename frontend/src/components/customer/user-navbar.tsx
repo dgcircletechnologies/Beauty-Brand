@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
@@ -115,6 +115,9 @@ export function UserNavbar() {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const exploreCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -140,6 +143,14 @@ export function UserNavbar() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (exploreCloseTimeoutRef.current) {
+        clearTimeout(exploreCloseTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const childCategories = useMemo(
     () => categories.filter((category) => category.parentId),
     [categories],
@@ -160,6 +171,20 @@ export function UserNavbar() {
     setIsMobileOpen(false);
   }
 
+  function openExploreMenu() {
+    if (exploreCloseTimeoutRef.current) {
+      clearTimeout(exploreCloseTimeoutRef.current);
+    }
+
+    setIsExploreOpen(true);
+  }
+
+  function scheduleExploreMenuClose() {
+    exploreCloseTimeoutRef.current = setTimeout(() => {
+      setIsExploreOpen(false);
+    }, 160);
+  }
+
   return (
     <header className="user-navbar">
       <nav className="user-navbar-inner" aria-label="Global">
@@ -176,25 +201,29 @@ export function UserNavbar() {
             </Link>
             <div
               className="explore-menu"
-              onMouseEnter={() => setIsExploreOpen(true)}
-              onMouseLeave={() => setIsExploreOpen(false)}
             >
               <button
                 className="explore-trigger"
                 type="button"
                 aria-expanded={isExploreOpen}
+                onMouseEnter={openExploreMenu}
+                onMouseLeave={scheduleExploreMenuClose}
                 onClick={() => setIsExploreOpen((current) => !current)}
               >
                 Explore
                 <ChevronIcon />
               </button>
               {isExploreOpen ? (
-                <div className="explore-panel">
+                <div
+                  className="explore-panel"
+                  onMouseEnter={openExploreMenu}
+                  onMouseLeave={scheduleExploreMenuClose}
+                >
                   <div className="explore-panel-content">
                     <div className="explore-link-groups">
                       <div>
                         <h2>Categories</h2>
-                        <ul>
+                        <ul className="explore-category-grid">
                           {childCategories.length ? (
                             childCategories.map((category) => (
                               <li key={category.id}>

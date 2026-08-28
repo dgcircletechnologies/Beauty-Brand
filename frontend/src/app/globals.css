@@ -389,7 +389,7 @@ p {
   position: absolute;
   inset-inline: 0;
   top: 100%;
-  z-index: -1;
+  z-index: 20;
   background: #ffffff;
   color: #09090b;
   box-shadow: 0 24px 48px rgba(9, 9, 11, 0.14);
@@ -407,7 +407,8 @@ p {
 
 .explore-link-groups {
   display: flex;
-  max-width: 560px;
+  flex: 1;
+  max-width: 760px;
   flex-wrap: wrap;
   gap: 32px clamp(24px, 5vw, 80px);
 }
@@ -428,6 +429,16 @@ p {
   list-style: none;
 }
 
+.explore-link-groups > div {
+  width: 100%;
+}
+
+.explore-link-groups .explore-category-grid {
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  align-items: start;
+  gap: 10px 12px;
+}
+
 .explore-link-groups a,
 .explore-link-groups span,
 .user-footer-links a {
@@ -438,6 +449,41 @@ p {
   text-transform: uppercase;
 }
 
+.explore-category-grid a,
+.explore-category-grid span {
+  position: relative;
+  min-height: 42px;
+  width: max-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  padding: 10px 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.explore-category-grid a::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: 4px;
+  width: 100%;
+  height: 1px;
+  background: #18181b;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 180ms ease;
+}
+
+.explore-category-grid a:hover {
+  background: transparent;
+}
+
+.explore-category-grid a:hover::after {
+  transform: scaleX(1);
+}
+
 .explore-link-groups a:hover,
 .user-footer-links a:hover {
   color: #18181b;
@@ -445,7 +491,7 @@ p {
 
 .explore-featured {
   display: flex;
-  max-width: 60%;
+  max-width: 48%;
   justify-content: flex-end;
   gap: 12px;
   overflow-x: auto;
@@ -3693,6 +3739,12 @@ button.attribute-view-select {
   }
 }
 
+@media (max-width: 1180px) {
+  .explore-link-groups .explore-category-grid {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+}
+
 @media (max-width: 760px) {
   .user-navbar-row {
     padding-block: 18px;
@@ -3709,6 +3761,10 @@ button.attribute-view-select {
   .explore-panel-content {
     min-height: auto;
     padding: 28px 20px;
+  }
+
+  .explore-link-groups .explore-category-grid {
+    grid-template-columns: 1fr;
   }
 }
 
