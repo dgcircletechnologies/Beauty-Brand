@@ -157,12 +157,12 @@ export function UserNavbar() {
     };
   }, []);
 
-  const childCategories = useMemo(
-    () => categories.filter((category) => category.parentId),
+  const rootCategories = useMemo(
+    () => categories.filter((category) => !category.parentId),
     [categories],
   );
 
-  const featuredCategories = childCategories.slice(0, 3);
+  const featuredCategories = rootCategories.slice(0, 3);
 
   async function handleLogout() {
     await logout();
@@ -251,11 +251,11 @@ export function UserNavbar() {
                       <div>
                         <h2>Categories</h2>
                         <ul className="explore-category-grid">
-                          {childCategories.length ? (
-                            childCategories.map((category) => (
+                          {rootCategories.length ? (
+                            rootCategories.map((category) => (
                               <li key={category.id}>
                                 <Link
-                                  href={`/shop?category=${category.slug}`}
+                                  href={`/categories/${category.slug}`}
                                   onClick={closeMenus}
                                 >
                                   {category.name}
@@ -278,7 +278,7 @@ export function UserNavbar() {
                           return (
                             <Link
                               className="explore-feature-card"
-                              href={`/shop?category=${category.slug}`}
+                              href={`/categories/${category.slug}`}
                               key={category.id}
                               onClick={closeMenus}
                             >
@@ -300,6 +300,7 @@ export function UserNavbar() {
                 </div>
               ) : null}
             </div>
+            <Link href="/categories">Categories</Link>
             <Link href="/shop">Shop</Link>
             <Link href="/checkout">Checkout</Link>
           </div>

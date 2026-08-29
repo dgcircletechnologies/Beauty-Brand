@@ -1,22 +1,10 @@
-import { Suspense } from "react";
-
-import { ProductDashboard } from "@/components/customer/product-dashboard";
+import { HomeExperience } from "@/components/customer/home-experience";
 import { UserShell } from "@/components/customer/user-shell";
 
 export default function DashboardPage() {
   return (
     <UserShell>
-      <Suspense
-        fallback={
-          <main className="customer-page">
-            <section className="empty-surface">
-              <h2>Loading products...</h2>
-            </section>
-          </main>
-        }
-      >
-        <ProductDashboard />
-      </Suspense>
+      <HomeExperience />
     </UserShell>
   );
 }

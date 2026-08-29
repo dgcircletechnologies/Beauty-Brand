@@ -63,6 +63,12 @@ export type CustomerCategory = {
   images?: CustomerCategoryImage[];
 };
 
+export type CustomerCategoryDetail = CustomerCategory & {
+  parent?: CustomerCategory | null;
+  children?: CustomerCategory[];
+  products?: CustomerProduct[];
+};
+
 export type CustomerProductIngredient = {
   purpose: string | null;
   concentration: string | null;
@@ -542,6 +548,12 @@ export function getCustomerProduct(slug: string) {
 
 export function getCustomerCategories() {
   return apiRequest<CustomerCategory[]>("/categories");
+}
+
+export function getCustomerCategory(slug: string) {
+  return apiRequest<CustomerCategoryDetail>(
+    `/categories/${encodeURIComponent(slug)}`,
+  );
 }
 
 export function getCustomerCategoryProducts(slug: string) {

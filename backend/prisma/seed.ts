@@ -1,12 +1,15 @@
 import 'dotenv/config';
 
 import { PrismaPg } from '@prisma/adapter-pg';
+import * as bcrypt from 'bcrypt';
 
 import { PrismaClient } from '../generated/prisma/client.cjs';
 import {
   AttributeDataType,
   CurrencyStatus,
   ProductStatus,
+  UserRole,
+  UserStatus,
 } from '../generated/prisma/enums.cjs';
 
 type BasicRecord = {
@@ -259,6 +262,32 @@ function slugify(value: string) {
 
 function pick<T>(items: T[], index: number, offset = 0) {
   return items[(index + offset) % items.length];
+}
+
+async function seedAdminUser() {
+  const passwordHash = await bcrypt.hash('#Bluewave@9906', 12);
+
+  await prisma.user.upsert({
+    where: { email: 'admin@bluewave.com' },
+    update: {
+      firstName: 'BlueWave',
+      lastName: 'Admin',
+      passwordHash,
+      role: UserRole.ADMIN,
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: new Date(),
+      deletedAt: null,
+    },
+    create: {
+      firstName: 'BlueWave',
+      lastName: 'Admin',
+      email: 'admin@bluewave.com',
+      passwordHash,
+      role: UserRole.ADMIN,
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: new Date(),
+    },
+  });
 }
 
 async function seedCurrencies() {
@@ -916,13 +945,16 @@ async function seedProducts(
 async function main() {
   console.log('Seeding BlueWave demo data...');
 
+  await seedAdminUser();
   await seedCurrencies();
   const categoryBySlug = await seedCategories();
   const metadata = await seedMetadata();
   const attributeData = await seedAttributes(categoryBySlug);
   await seedProducts(categoryBySlug, metadata, attributeData);
 
-  console.log('Seed complete: categories, metadata, attributes, and 50 products are ready.');
+  console.log(
+    'Seed complete: admin, categories, metadata, attributes, and 50 products are ready.',
+  );
 }
 
 main()

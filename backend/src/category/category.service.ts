@@ -266,6 +266,15 @@ export class CategoryService {
             },
           ],
         },
+        variants: {
+          where: {
+            deletedAt: null,
+            isActive: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
       },
       orderBy: [
         {
