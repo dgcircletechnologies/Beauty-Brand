@@ -52,7 +52,7 @@ services:
       CLOUDINARY_PRODUCT_FOLDER: ${CLOUDINARY_PRODUCT_FOLDER:-bluewave/products}
       CLOUDINARY_CATEGORY_FOLDER: ${CLOUDINARY_CATEGORY_FOLDER:-bluewave/categories}
     ports:
-      - "${BACKEND_PORT:-4000}:3000"
+      - "${BACKEND_PORT:-9000}:3000"
     depends_on:
       postgres:
         condition: service_healthy

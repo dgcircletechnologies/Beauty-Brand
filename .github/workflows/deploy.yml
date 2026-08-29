@@ -132,7 +132,7 @@ jobs:
             printf '%s\n' "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
             printf '%s\n' "POSTGRES_DB=skincare_db"
             printf '%s\n' "POSTGRES_PORT=5433"
-            printf '%s\n' "BACKEND_PORT=4000"
+            printf '%s\n' "BACKEND_PORT=9000"
             printf '%s\n' "FRONTEND_PORT=5001"
             printf '%s\n' "CORS_ORIGIN=http://localhost:5001"
             printf '%s\n' "APP_FRONTEND_URL=http://localhost:5001"
