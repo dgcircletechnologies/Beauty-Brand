@@ -41,4 +41,4 @@ COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start:prod"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed-admin.js && npm run start:prod"]
