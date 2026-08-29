@@ -27,7 +27,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOST: 0.0.0.0
-      DATABASE_URL: postgresql://${POSTGRES_USER:-skincare}:${POSTGRES_PASSWORD:-skincare}@postgres:5432/${POSTGRES_DB:-skincare_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-skincare}:${POSTGRES_PASSWORD:-skincare}@postgres:5433/${POSTGRES_DB:-skincare_db}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5000}
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}

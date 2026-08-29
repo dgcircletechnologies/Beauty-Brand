@@ -30,13 +30,13 @@ const footerNavigation = {
     { name: "Addresses", href: "/addresses" },
   ],
   support: [
-    { name: "Contact", href: "#" },
-    { name: "Shipping", href: "#" },
-    { name: "Returns", href: "#" },
+    { name: "Contact", href: "/contact" },
+    { name: "Shipping", href: "/shipping" },
+    { name: "Returns", href: "/returns" },
   ],
   legal: [
-    { name: "Privacy policy", href: "#" },
-    { name: "Terms of service", href: "#" },
+    { name: "Privacy policy", href: "/privacy-policy" },
+    { name: "Terms of service", href: "/terms-and-conditions" },
   ],
 };
 
