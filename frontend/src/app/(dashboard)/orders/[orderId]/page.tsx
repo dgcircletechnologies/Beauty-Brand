@@ -20,6 +20,78 @@ const cancellableStatuses = [
   "PAID",
   "PROCESSING",
 ] as const;
+const repayableStatuses = ["PENDING_PAYMENT", "PAYMENT_FAILED"] as const;
+
+type RazorpayCheckoutResponse = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayCheckoutOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  prefill: {
+    email: string;
+    contact?: string;
+  };
+  notes: {
+    localOrderId: string;
+    orderNumber: string;
+  };
+  theme: {
+    color: string;
+  };
+  handler: (response: RazorpayCheckoutResponse) => void;
+  modal: {
+    ondismiss: () => void;
+  };
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => {
+      open: () => void;
+      on: (
+        event: "payment.failed",
+        handler: (response: { error?: { description?: string } }) => void,
+      ) => void;
+    };
+  }
+}
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://checkout.razorpay.com/v1/checkout.js"]',
+    );
+
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("Unable to load Razorpay checkout")),
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load Razorpay checkout"));
+    document.body.appendChild(script);
+  });
+}
 
 function formatStatus(status: string) {
   return status.replaceAll("_", " ").toLowerCase();
@@ -106,6 +178,7 @@ export default function OrderDetailPage() {
   const [isCancellationOpen, setIsCancellationOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -168,6 +241,100 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function handleRepay() {
+    if (!accessToken || !order) {
+      return;
+    }
+
+    setIsPaying(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await loadRazorpayCheckout();
+
+      if (!window.Razorpay) {
+        throw new Error("Unable to load Razorpay checkout");
+      }
+
+      const razorpayOrder = await customerApi.retryRazorpayPayment(
+        accessToken,
+        order.id,
+      );
+      const checkout = new window.Razorpay({
+        key: razorpayOrder.keyId,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        name: "BlueWave Skincare",
+        description: `Order ${razorpayOrder.orderNumber}`,
+        order_id: razorpayOrder.razorpayOrderId,
+        prefill: {
+          email: razorpayOrder.customerEmail,
+          contact: razorpayOrder.customerPhone ?? order.customerPhone ?? undefined,
+        },
+        notes: {
+          localOrderId: razorpayOrder.localOrderId,
+          orderNumber: razorpayOrder.orderNumber,
+        },
+        theme: {
+          color: "#1868db",
+        },
+        handler: (response) => {
+          void verifyRetryPayment(razorpayOrder.localOrderId, response);
+        },
+        modal: {
+          ondismiss: () => {
+            setIsPaying(false);
+          },
+        },
+      });
+
+      checkout.on("payment.failed", (response) => {
+        setError(response.error?.description ?? "Razorpay payment failed");
+        setIsPaying(false);
+      });
+      checkout.open();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to restart Razorpay payment",
+      );
+      setIsPaying(false);
+    }
+  }
+
+  async function verifyRetryPayment(
+    localOrderId: string,
+    response: RazorpayCheckoutResponse,
+  ) {
+    if (!accessToken) {
+      setError("Login again to verify payment.");
+      setIsPaying(false);
+      return;
+    }
+
+    try {
+      const paidOrder = await customerApi.verifyRazorpayPayment(accessToken, {
+        localOrderId,
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
+      });
+
+      setOrder(paidOrder);
+      setSuccess("Payment completed.");
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to verify Razorpay payment",
+      );
+    } finally {
+      setIsPaying(false);
+    }
+  }
+
   const shippingAddress = useMemo(
     () => (order ? getAddress(order, "SHIPPING") : null),
     [order],
@@ -213,6 +380,9 @@ export default function OrderDetailPage() {
     cancellableStatuses.includes(
       order.status as (typeof cancellableStatuses)[number],
     ) && !pendingCancellation;
+  const canRepay = repayableStatuses.includes(
+    order.status as (typeof repayableStatuses)[number],
+  );
   const progressStep = getOrderStep(order.status);
   const progressWidth = Math.max(8, (progressStep / fulfillmentSteps.length) * 100);
 
@@ -237,9 +407,21 @@ export default function OrderDetailPage() {
             </h1>
             <p>{formatStatus(order.status)}</p>
           </div>
-          <Link className="secondary-link-button compact-button" href="/orders">
-            Back to Orders
-          </Link>
+          <div className="order-detail-actions">
+            {canRepay ? (
+              <button
+                className="primary-button compact-button"
+                disabled={isPaying}
+                type="button"
+                onClick={() => void handleRepay()}
+              >
+                {isPaying ? "Opening Razorpay..." : "Pay Now"}
+              </button>
+            ) : null}
+            <Link className="secondary-link-button compact-button" href="/orders">
+              Back to Orders
+            </Link>
+          </div>
         </section>
 
         {success ? <p className="form-success">{success}</p> : null}

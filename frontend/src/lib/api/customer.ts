@@ -672,6 +672,14 @@ export function createRazorpayOrder(
   });
 }
 
+export function retryRazorpayPayment(accessToken: string, orderId: string) {
+  return apiRequest<RazorpayOrder>("/payments/razorpay/retry", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify({ orderId }),
+  });
+}
+
 export function verifyRazorpayPayment(
   accessToken: string,
   payload: {

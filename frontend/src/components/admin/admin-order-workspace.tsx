@@ -29,7 +29,6 @@ type OrderModalActionContext = {
 };
 
 type AdminOrderWorkspaceProps = {
-  analytics?: boolean;
   emptyText: string;
   emptyTitle: string;
   isLoading: boolean;
@@ -46,7 +45,6 @@ type AdminOrderWorkspaceProps = {
 const pageSize = 8;
 
 export const AdminOrderWorkspace = memo(function AdminOrderWorkspace({
-  analytics = false,
   emptyText,
   emptyTitle,
   isLoading,
@@ -93,7 +91,6 @@ export const AdminOrderWorkspace = memo(function AdminOrderWorkspace({
     return filteredOrders.slice(startIndex, startIndex + pageSize);
   }, [currentPage, filteredOrders]);
 
-  const metrics = useMemo(() => getOrderMetrics(orders), [orders]);
   const openOrder = useCallback((order: adminApi.AdminOrder) => {
     setSelectedOrder(order);
   }, []);
@@ -126,14 +123,13 @@ export const AdminOrderWorkspace = memo(function AdminOrderWorkspace({
 
   return (
     <>
-      {analytics ? <OrderAnalytics metrics={metrics} /> : null}
-      <section className="catalog-section">
+      <section className="catalog-section analytics-card admin-orders-surface">
         <div className="section-title">
           <h2>{title}</h2>
           <span>{filteredOrders.length}</span>
         </div>
         {showFilters ? (
-          <div className="all-products-filters">
+          <div className="all-products-filters analytics-toolbar order-toolbar">
             <input
               aria-label="Search orders"
               placeholder="Search order, customer, product"
@@ -215,7 +211,9 @@ const OrderRow = memo(function OrderRow({ order, onOpen }: OrderRowProps) {
         <small>{order.customerEmail}</small>
       </span>
       <span className="order-product-summary">{productNames}</span>
-      <span>{formatStatus(order.status)}</span>
+      <span className={`status-badge status-${order.status.toLowerCase()}`}>
+        {formatStatus(order.status)}
+      </span>
       <strong>{formatMoney(order.displayTotalAmount, order.displayCurrency)}</strong>
     </button>
   );
@@ -264,7 +262,11 @@ export const OrderDetailModal = memo(function OrderDetailModal({
           </div>
           <div>
             <h3>Status</h3>
-            <p>{formatStatus(order.status)}</p>
+            <p>
+              <span className={`status-badge status-${order.status.toLowerCase()}`}>
+                {formatStatus(order.status)}
+              </span>
+            </p>
             <p>
               {latestShipment
                 ? `Shipment ${formatStatus(latestShipment.status)}`
@@ -338,38 +340,6 @@ export const OrderDetailModal = memo(function OrderDetailModal({
   );
 });
 
-type OrderAnalyticsProps = {
-  metrics: {
-    status: string;
-    count: number;
-    percent: number;
-  }[];
-};
-
-const OrderAnalytics = memo(function OrderAnalytics({
-  metrics,
-}: OrderAnalyticsProps) {
-  return (
-    <section className="catalog-section order-analytics">
-      <div className="section-title">
-        <h2>Analytics</h2>
-        <span>{metrics.reduce((total, metric) => total + metric.count, 0)}</span>
-      </div>
-      <div className="order-analytics-bars">
-        {metrics.map((metric) => (
-          <div className="order-analytics-row" key={metric.status}>
-            <span>{formatStatus(metric.status)}</span>
-            <div>
-              <i style={{ width: `${metric.percent}%` }} />
-            </div>
-            <strong>{metric.count}</strong>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-});
-
 type PaginationControlsProps = {
   currentPage: number;
   hasNextPage: boolean;
@@ -439,24 +409,6 @@ export function handleOrderFormSubmit(
 ) {
   event.preventDefault();
   handler(new FormData(event.currentTarget));
-}
-
-function getOrderMetrics(orders: adminApi.AdminOrder[]) {
-  const counts = orders.reduce<Record<string, number>>((acc, order) => {
-    acc[order.status] = (acc[order.status] ?? 0) + 1;
-    return acc;
-  }, {});
-  const maxCount = Math.max(1, ...Object.values(counts));
-
-  return Object.entries(counts)
-    .sort(([firstStatus], [secondStatus]) =>
-      firstStatus.localeCompare(secondStatus),
-    )
-    .map(([status, count]) => ({
-      status,
-      count,
-      percent: Math.max(8, Math.round((count / maxCount) * 100)),
-    }));
 }
 
 function formatDate(value: string) {

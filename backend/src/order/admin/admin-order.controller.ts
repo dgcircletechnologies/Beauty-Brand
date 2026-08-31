@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Req } from '@nestjs/common';
 
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request.interface';
@@ -25,6 +25,15 @@ export class AdminOrderController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.orderService.updateOrderStatus(request.user.id, orderId, dto);
+  }
+
+  @Delete(':orderId')
+  @ResponseMessage('Order deleted successfully')
+  deleteOrder(
+    @Req() request: AuthenticatedRequest,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.orderService.deleteUnpaidOrder(request.user.id, orderId);
   }
 
   @Patch('cancellation-requests/:requestId')

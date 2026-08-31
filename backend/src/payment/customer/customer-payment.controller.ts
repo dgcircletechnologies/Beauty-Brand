@@ -3,6 +3,7 @@ import { Body, Controller, Post, Req } from '@nestjs/common';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request.interface';
 import { CreateRazorpayOrderDto } from '../dto/create-razorpay-order.dto';
+import { RetryRazorpayPaymentDto } from '../dto/retry-razorpay-payment.dto';
 import { VerifyRazorpayPaymentDto } from '../dto/verify-razorpay-payment.dto';
 import { PaymentService } from '../payment.service';
 
@@ -17,6 +18,15 @@ export class CustomerPaymentController {
     @Body() dto: CreateRazorpayOrderDto,
   ) {
     return this.paymentService.createRazorpayOrder(request.user.id, dto);
+  }
+
+  @Post('retry')
+  @ResponseMessage('Razorpay retry order created successfully')
+  retryRazorpayPayment(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: RetryRazorpayPaymentDto,
+  ) {
+    return this.paymentService.retryRazorpayPayment(request.user.id, dto);
   }
 
   @Post('verify')

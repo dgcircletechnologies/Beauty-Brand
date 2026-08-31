@@ -570,6 +570,20 @@ export type AdminPayment = {
   } | null;
 };
 
+export type RazorpaySettingValue = {
+  configured: boolean;
+  value: string;
+  maskedValue: string;
+  updatedAt: string | null;
+};
+
+export type RazorpaySettings = {
+  keyId: RazorpaySettingValue;
+  keySecret: RazorpaySettingValue;
+  webhookSecret: RazorpaySettingValue;
+  webhookPath: string;
+};
+
 export type CreateAdminExchangeRatePayload = {
   baseCurrencyCode: string;
   quoteCurrencyCode: string;
@@ -1592,6 +1606,27 @@ export function getAdminPayments(accessToken: string) {
   });
 }
 
+export function getRazorpaySettings(accessToken: string) {
+  return apiRequest<RazorpaySettings>("/admin/payments/settings/razorpay", {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function updateRazorpaySettings(
+  accessToken: string,
+  payload: {
+    keyId?: string;
+    keySecret?: string;
+    webhookSecret?: string;
+  },
+) {
+  return apiRequest<RazorpaySettings>("/admin/payments/settings/razorpay", {
+    method: "PUT",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getAdminPayment(accessToken: string, paymentId: string) {
   return apiRequest<AdminPayment>(`/admin/payments/${paymentId}`, {
     headers: withAuth(accessToken),
@@ -1608,6 +1643,16 @@ export function updateAdminOrderStatus(
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),
   });
+}
+
+export function deleteAdminOrder(accessToken: string, orderId: string) {
+  return apiRequest<{ deleted: boolean; orderId: string }>(
+    `/admin/orders/${orderId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
 }
 
 export function decideAdminCancellationRequest(

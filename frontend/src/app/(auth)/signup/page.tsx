@@ -62,11 +62,16 @@ export default function SignupPage() {
 
   return (
     <AuthCard
-      title="Sign Up"
-      subtitle="Create a customer account."
+      title="Create your account"
+      subtitle="Join BlueWave for saved routines, faster checkout, and skincare picks made for you."
       footerText="Already have an account?"
       footerHref="/login"
       footerAction="Login"
+      imageSrc="/images/skincare/hero.png"
+      imageAlt="BlueWave skincare campaign model"
+      imageLabel="Fresh Start"
+      imageTitle="Create a profile for your skincare rhythm."
+      imageText="Tell us the basics now and refine your routine as you shop."
     >
       <form className="auth-form" onSubmit={handleSubmit}>
           <div className="split-fields">

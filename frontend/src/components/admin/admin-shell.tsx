@@ -105,6 +105,17 @@ const orderLinks = [
   },
 ];
 
+const paymentLinks = [
+  {
+    href: "/admin/payments",
+    label: "Transactions",
+  },
+  {
+    href: "/admin/payments/settings",
+    label: "Razorpay Variables",
+  },
+];
+
 const shippingLinks = [
   {
     href: "/admin/shipping",
@@ -160,6 +171,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
   const [isOrdersOpen, setIsOrdersOpen] = useState(
     pathname.startsWith("/admin/orders"),
+  );
+  const [isPaymentsOpen, setIsPaymentsOpen] = useState(
+    pathname.startsWith("/admin/payments"),
   );
   const [isShippingOpen, setIsShippingOpen] = useState(
     pathname.startsWith("/admin/shipping"),
@@ -286,14 +300,46 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </div>
 
-          <Link
-            aria-current={isPaymentsActive ? "page" : undefined}
-            className={isPaymentsActive ? "active nav-link" : "nav-link"}
-            href="/admin/payments"
-          >
-            <OrdersIcon />
-            <span>Payments</span>
-          </Link>
+          <div className={`nav-group ${isPaymentsActive ? "active" : ""}`}>
+            <div className="nav-group-row">
+              <Link
+                aria-current={
+                  pathname === "/admin/payments" ? "page" : undefined
+                }
+                className={isPaymentsActive ? "active nav-link" : "nav-link"}
+                href="/admin/payments"
+              >
+                <OrdersIcon />
+                <span>Payments</span>
+              </Link>
+              <button
+                aria-expanded={isPaymentsOpen}
+                aria-label="Toggle payment options"
+                className="icon-button nav-options-button"
+                type="button"
+                onClick={() => {
+                  setIsPaymentsOpen((current) => !current);
+                  setIsSidebarCollapsed(false);
+                }}
+              >
+                <ChevronIcon />
+              </button>
+            </div>
+            {isPaymentsOpen && !isSidebarCollapsed ? (
+              <div className="nav-submenu">
+                {paymentLinks.map((link) => (
+                  <Link
+                    aria-current={pathname === link.href ? "page" : undefined}
+                    className={pathname === link.href ? "active" : undefined}
+                    href={link.href}
+                    key={link.href}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           <div className={`nav-group ${isShippingActive ? "active" : ""}`}>
             <div className="nav-group-row">

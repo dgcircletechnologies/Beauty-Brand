@@ -51,11 +51,16 @@ export default function LoginPage() {
 
   return (
     <AuthCard
-      title="Login"
-      subtitle="Access your skincare workspace."
+      title="Login to your account"
+      subtitle="Access your order history, saved routines, and personalized skincare features."
       footerText="New here?"
       footerHref="/signup"
       footerAction="Create an account"
+      imageSrc="/images/skincare/feature-1.webp"
+      imageAlt="Skincare ritual products arranged on a warm surface"
+      imageLabel="Daily Essentials"
+      imageTitle="Return to your routine in one easy step."
+      imageText="Your cart, wishlist, addresses, and orders are ready when you are."
     >
       <form className="auth-form" onSubmit={handleSubmit}>
         <label>

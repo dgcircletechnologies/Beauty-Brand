@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { AdminOrderWorkspace } from "@/components/admin/admin-order-workspace";
 import { useAuth } from "@/contexts/auth-context";
@@ -10,51 +10,100 @@ export default function AdminOrdersPage() {
   const { accessToken } = useAuth();
   const [orders, setOrders] = useState<adminApi.AdminOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadOrders = useCallback(async () => {
     if (!accessToken) {
       return;
     }
 
-    let isMounted = true;
-    const token = accessToken;
+    setIsLoading(true);
+    setError(null);
 
-    async function loadOrders() {
-      setIsLoading(true);
+    try {
+      setOrders(await adminApi.getAdminOrders(accessToken));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to load orders",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    void loadOrders();
+  }, [loadOrders]);
+
+  const cancelOrder = useCallback(
+    async (
+      event: FormEvent<HTMLFormElement>,
+      orderId: string,
+      close: () => void,
+    ) => {
+      event.preventDefault();
+
+      if (!accessToken) {
+        return;
+      }
+
+      const formData = new FormData(event.currentTarget);
+
+      setIsSubmitting(true);
       setError(null);
 
       try {
-        const nextOrders = await adminApi.getAdminOrders(token);
-
-        if (isMounted) {
-          setOrders(nextOrders);
-        }
+        await adminApi.updateAdminOrderStatus(accessToken, orderId, {
+          status: "CANCELLED",
+          reason: String(formData.get("reason") || "Order cancelled by admin"),
+        });
+        close();
+        await loadOrders();
       } catch (caughtError) {
-        if (isMounted) {
-          setError(
-            caughtError instanceof Error
-              ? caughtError.message
-              : "Unable to load orders",
-          );
-        }
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to cancel order",
+        );
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        setIsSubmitting(false);
       }
-    }
+    },
+    [accessToken, loadOrders],
+  );
 
-    void loadOrders();
+  const deleteOrder = useCallback(
+    async (orderId: string, close: () => void) => {
+      if (!accessToken) {
+        return;
+      }
 
-    return () => {
-      isMounted = false;
-    };
-  }, [accessToken]);
+      setIsSubmitting(true);
+      setError(null);
+
+      try {
+        await adminApi.deleteAdminOrder(accessToken, orderId);
+        close();
+        await loadOrders();
+      } catch (caughtError) {
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to delete order",
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [accessToken, loadOrders],
+  );
 
   return (
-    <main>
-      <section className="dashboard-header">
+    <main className="admin-page analytics-page orders-admin-page">
+      <section className="dashboard-header analytics-header">
         <div>
           <p className="eyebrow">Operations</p>
           <h1>All Orders</h1>
@@ -65,11 +114,40 @@ export default function AdminOrdersPage() {
       {error ? <p className="form-error">{error}</p> : null}
 
       <AdminOrderWorkspace
-        analytics
         emptyText="Confirmed customer orders will appear here."
         emptyTitle="No orders yet"
         isLoading={isLoading}
         orders={orders}
+        renderActions={(order, { close }) =>
+          ["PENDING_PAYMENT", "PAYMENT_FAILED"].includes(order.status) ? (
+            <div className="cancellation-detail-actions">
+              <form
+                className="admin-form"
+                onSubmit={(event) => void cancelOrder(event, order.id, close)}
+              >
+                <label>
+                  <span>Cancel reason</span>
+                  <input name="reason" placeholder="Payment not completed" />
+                </label>
+                <button
+                  className="secondary-button compact-button"
+                  disabled={isSubmitting}
+                  type="submit"
+                >
+                  {isSubmitting ? "Cancelling..." : "Cancel and Restock"}
+                </button>
+              </form>
+              <button
+                className="secondary-button compact-button"
+                disabled={isSubmitting}
+                type="button"
+                onClick={() => void deleteOrder(order.id, close)}
+              >
+                {isSubmitting ? "Deleting..." : "Delete Unpaid Order"}
+              </button>
+            </div>
+          ) : null
+        }
         showStatusHistory
         title="Orders"
       />

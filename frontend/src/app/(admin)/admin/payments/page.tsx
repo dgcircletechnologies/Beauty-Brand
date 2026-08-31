@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
@@ -18,6 +19,13 @@ function formatMoney(
   return `${currency?.symbol ?? currency?.code ?? ""}${value.toFixed(
     currency?.decimalDigits ?? 2,
   )}`;
+}
+
+function formatStatus(status: string) {
+  return status
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
 }
 
 export default function AdminPaymentsPage() {
@@ -109,12 +117,17 @@ export default function AdminPaymentsPage() {
   ).length;
 
   return (
-    <main className="admin-page">
-      <section className="dashboard-header">
+    <main className="admin-page analytics-page payments-admin-page">
+      <section className="dashboard-header analytics-header">
         <div>
           <p className="eyebrow">Payments</p>
           <h1>Razorpay payment details</h1>
           <p>Track payment attempts, Razorpay ids, and linked orders.</p>
+        </div>
+        <div className="analytics-actions">
+          <Link className="secondary-link-button compact-button" href="/admin/payments/settings">
+            Razorpay Variables
+          </Link>
         </div>
       </section>
 
@@ -126,28 +139,33 @@ export default function AdminPaymentsPage() {
         </section>
       ) : (
         <>
-          <section className="stats-grid">
-            <article className="stat-card">
+          <section className="analytics-kpi-grid payment-kpi-grid">
+            <article className="analytics-card metric-card tone-blue">
               <span>Total payments</span>
               <strong>{payments.length}</strong>
+              <small>All recorded attempts</small>
             </article>
-            <article className="stat-card">
+            <article className="analytics-card metric-card tone-green">
               <span>Successful amount</span>
               <strong>{formatMoney(succeededTotal, payments[0]?.currency)}</strong>
+              <small>Captured payments</small>
             </article>
-            <article className="stat-card">
+            <article className="analytics-card metric-card tone-red">
               <span>Failed attempts</span>
               <strong>{failedCount}</strong>
+              <small>Needs review or retry</small>
             </article>
           </section>
 
-          <section className="admin-toolbar">
+          <section className="admin-toolbar analytics-toolbar">
             <input
+              aria-label="Search payments"
               placeholder="Search order, email, Razorpay id"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
             <select
+              aria-label="Filter payment status"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
             >
@@ -161,8 +179,8 @@ export default function AdminPaymentsPage() {
           </section>
 
           {filteredPayments.length ? (
-            <section className="admin-detail-layout">
-              <div className="admin-list-panel">
+            <section className="admin-detail-layout payment-detail-layout">
+              <div className="admin-list-panel analytics-card payment-list-panel">
                 <div className="section-title">
                   <h2>Transactions</h2>
                   <span>{filteredPayments.length}</span>
@@ -184,17 +202,19 @@ export default function AdminPaymentsPage() {
                     </span>
                     <span>
                       <strong>{formatMoney(payment.amount, payment.currency)}</strong>
-                      <small>{payment.status}</small>
+                      <small>
+                        <StatusBadge status={payment.status} />
+                      </small>
                     </span>
                   </button>
                 ))}
               </div>
 
               {selectedPayment ? (
-                <aside className="product-detail-panel">
+                <aside className="product-detail-panel analytics-card payment-detail-panel">
                   <div className="section-title">
-                    <h2>{selectedPayment.status}</h2>
-                    <span>{selectedPayment.provider}</span>
+                    <h2>{formatStatus(selectedPayment.status)}</h2>
+                    <span>{formatStatus(selectedPayment.provider)}</span>
                   </div>
                   <div className="detail-table">
                     <div className="detail-table-row">
@@ -261,5 +281,13 @@ export default function AdminPaymentsPage() {
         </>
       )}
     </main>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`status-badge status-${status.toLowerCase()}`}>
+      {formatStatus(status)}
+    </span>
   );
 }

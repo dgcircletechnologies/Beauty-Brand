@@ -78,7 +78,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          # VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
           CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
           APP_FRONTEND_URL: ${{ secrets.APP_FRONTEND_URL }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}

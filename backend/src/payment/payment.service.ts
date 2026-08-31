@@ -7,10 +7,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual, createHash } from 'crypto';
 
-import { PaymentStatus } from '../../generated/prisma/enums.cjs';
+import { OrderStatus, PaymentStatus } from '../../generated/prisma/enums.cjs';
 import { PrismaService } from '../database/prisma.service';
 import { OrderService } from '../order/order.service';
 import { CreateRazorpayOrderDto } from './dto/create-razorpay-order.dto';
+import { RetryRazorpayPaymentDto } from './dto/retry-razorpay-payment.dto';
+import { UpdateRazorpaySettingsDto } from './dto/update-razorpay-settings.dto';
 import { VerifyRazorpayPaymentDto } from './dto/verify-razorpay-payment.dto';
 
 type RazorpayOrderResponse = {
@@ -89,7 +91,7 @@ export class PaymentService {
     });
 
     return {
-      keyId: this.requiredConfig('RAZORPAY_KEY_ID'),
+      keyId: await this.requiredConfig('RAZORPAY_KEY_ID'),
       localOrderId: localOrder.id,
       orderNumber: localOrder.orderNumber,
       razorpayOrderId: razorpayOrder.id,
@@ -100,8 +102,87 @@ export class PaymentService {
     };
   }
 
+  async retryRazorpayPayment(userId: string, dto: RetryRazorpayPaymentDto) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id: dto.orderId,
+        userId,
+        status: {
+          in: [OrderStatus.PENDING_PAYMENT, OrderStatus.PAYMENT_FAILED],
+        },
+      },
+      include: {
+        payments: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Pending payment order not found');
+    }
+
+    const payment = await this.prisma.paymentTransaction.create({
+      data: {
+        orderId: order.id,
+        provider: 'razorpay',
+        idempotencyKey: `${order.orderNumber}-razorpay-${Date.now()}`,
+        status: PaymentStatus.PENDING,
+        amount: order.totalAmount,
+        currencyCode: order.baseCurrencyCode,
+        metadata: {
+          retryForPaymentId: order.payments[0]?.id ?? null,
+          stockReserved: order.payments.some((transaction) =>
+            this.hasReservedStock(transaction.metadata),
+          ),
+        },
+      },
+    });
+
+    const razorpayOrder = await this.createRazorpayApiOrder({
+      amount: this.toSmallestUnit(Number(payment.amount)),
+      currency: payment.currencyCode,
+      receipt: order.orderNumber,
+      notes: {
+        localOrderId: order.id,
+        orderNumber: order.orderNumber,
+        userId,
+      },
+    });
+
+    await this.prisma.paymentTransaction.update({
+      where: {
+        id: payment.id,
+      },
+      data: {
+        providerIntentId: razorpayOrder.id,
+        status: PaymentStatus.PROCESSING,
+        metadata: {
+          ...(typeof payment.metadata === 'object' &&
+            payment.metadata !== null &&
+            !Array.isArray(payment.metadata) &&
+            payment.metadata),
+          razorpayOrder,
+        },
+      },
+    });
+
+    return {
+      keyId: await this.requiredConfig('RAZORPAY_KEY_ID'),
+      localOrderId: order.id,
+      orderNumber: order.orderNumber,
+      razorpayOrderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+    };
+  }
+
   async verifyRazorpayPayment(userId: string, dto: VerifyRazorpayPaymentDto) {
-    this.verifyCheckoutSignature(dto);
+    await this.verifyCheckoutSignature(dto);
 
     const payment = await this.fetchRazorpayPayment(dto.razorpay_payment_id);
 
@@ -176,8 +257,55 @@ export class PaymentService {
     return this.toPaymentView(payment);
   }
 
+  async getRazorpaySettings() {
+    const settings = await this.prisma.storeSetting.findMany({
+      where: {
+        category: 'razorpay',
+      },
+    });
+    const values = new Map(settings.map((setting) => [setting.key, setting]));
+
+    return {
+      keyId: this.toSettingView('RAZORPAY_KEY_ID', values.get('RAZORPAY_KEY_ID')),
+      keySecret: this.toSettingView(
+        'RAZORPAY_KEY_SECRET',
+        values.get('RAZORPAY_KEY_SECRET'),
+      ),
+      webhookSecret: this.toSettingView(
+        'RAZORPAY_WEBHOOK_SECRET',
+        values.get('RAZORPAY_WEBHOOK_SECRET'),
+      ),
+      webhookPath: '/api/v1/payments/razorpay/webhook',
+    };
+  }
+
+  async updateRazorpaySettings(dto: UpdateRazorpaySettingsDto) {
+    await Promise.all([
+      this.upsertPaymentSetting(
+        'RAZORPAY_KEY_ID',
+        dto.keyId,
+        false,
+        'Razorpay key id used by checkout.',
+      ),
+      this.upsertPaymentSetting(
+        'RAZORPAY_KEY_SECRET',
+        dto.keySecret,
+        true,
+        'Razorpay key secret used for API calls and checkout verification.',
+      ),
+      this.upsertPaymentSetting(
+        'RAZORPAY_WEBHOOK_SECRET',
+        dto.webhookSecret,
+        true,
+        'Razorpay webhook signing secret.',
+      ),
+    ]);
+
+    return this.getRazorpaySettings();
+  }
+
   async handleRazorpayWebhook(signature: string | undefined, rawBody: Buffer) {
-    const webhookSecret = this.requiredConfig('RAZORPAY_WEBHOOK_SECRET');
+    const webhookSecret = await this.requiredConfig('RAZORPAY_WEBHOOK_SECRET');
     const bodyText = rawBody.toString('utf8');
     const expectedSignature = createHmac('sha256', webhookSecret)
       .update(bodyText)
@@ -261,7 +389,7 @@ export class PaymentService {
         const payment = payload.payload?.payment?.entity;
 
         if (payment?.order_id) {
-          await this.prisma.paymentTransaction.updateMany({
+          const updateResult = await this.prisma.paymentTransaction.updateMany({
             where: {
               provider: 'razorpay',
               providerIntentId: payment.order_id,
@@ -274,6 +402,22 @@ export class PaymentService {
               processedAt: new Date(),
             },
           });
+
+          if (updateResult.count) {
+            const transaction = await this.prisma.paymentTransaction.findFirst({
+              where: {
+                provider: 'razorpay',
+                providerIntentId: payment.order_id,
+              },
+            });
+
+            if (transaction) {
+              await this.orderService.markPaymentFailed(
+                transaction.orderId,
+                payment.error_description,
+              );
+            }
+          }
         }
       }
 
@@ -331,8 +475,8 @@ export class PaymentService {
   }
 
   private async razorpayRequest<T>(path: string, init: RequestInit) {
-    const keyId = this.requiredConfig('RAZORPAY_KEY_ID');
-    const keySecret = this.requiredConfig('RAZORPAY_KEY_SECRET');
+    const keyId = await this.requiredConfig('RAZORPAY_KEY_ID');
+    const keySecret = await this.requiredConfig('RAZORPAY_KEY_SECRET');
     const response = await fetch(`https://api.razorpay.com/v1${path}`, {
       ...init,
       headers: {
@@ -362,8 +506,8 @@ export class PaymentService {
     return payload as T;
   }
 
-  private verifyCheckoutSignature(dto: VerifyRazorpayPaymentDto) {
-    const keySecret = this.requiredConfig('RAZORPAY_KEY_SECRET');
+  private async verifyCheckoutSignature(dto: VerifyRazorpayPaymentDto) {
+    const keySecret = await this.requiredConfig('RAZORPAY_KEY_SECRET');
     const expectedSignature = createHmac('sha256', keySecret)
       .update(`${dto.razorpay_order_id}|${dto.razorpay_payment_id}`)
       .digest('hex');
@@ -387,14 +531,91 @@ export class PaymentService {
     return Math.round(amount * 100);
   }
 
-  private requiredConfig(key: string) {
-    const value = this.configService.get<string>(key);
+  private async requiredConfig(key: string) {
+    const value = await this.getPaymentConfig(key);
 
     if (!value) {
       throw new Error(`${key} is required`);
     }
 
     return value;
+  }
+
+  private async getPaymentConfig(key: string) {
+    const setting = await this.prisma.storeSetting.findUnique({
+      where: {
+        key,
+      },
+    });
+
+    return setting?.value || this.configService.get<string>(key) || '';
+  }
+
+  private async upsertPaymentSetting(
+    key: string,
+    value: string | undefined,
+    isSecret: boolean,
+    description: string,
+  ) {
+    const normalizedValue = value?.trim();
+
+    if (!normalizedValue) {
+      return;
+    }
+
+    await this.prisma.storeSetting.upsert({
+      where: {
+        key,
+      },
+      update: {
+        value: normalizedValue,
+        isSecret,
+        description,
+      },
+      create: {
+        key,
+        value: normalizedValue,
+        category: 'razorpay',
+        isSecret,
+        description,
+      },
+    });
+  }
+
+  private toSettingView(
+    key: string,
+    setting:
+      | {
+          value: string;
+          updatedAt: Date;
+        }
+      | undefined,
+  ) {
+    const value = setting?.value || this.configService.get<string>(key) || '';
+
+    return {
+      configured: Boolean(value),
+      value: '',
+      maskedValue: value ? this.maskValue(value) : '',
+      updatedAt: setting?.updatedAt ?? null,
+    };
+  }
+
+  private maskValue(value: string) {
+    if (value.length <= 8) {
+      return '****';
+    }
+
+    return `${value.slice(0, 4)}****${value.slice(-4)}`;
+  }
+
+  private hasReservedStock(metadata: unknown) {
+    return (
+      typeof metadata === 'object' &&
+      metadata !== null &&
+      !Array.isArray(metadata) &&
+      (metadata as { stockReserved?: unknown }).stockReserved === true
+    );
   }
 
   private toPaymentView(payment: any) {

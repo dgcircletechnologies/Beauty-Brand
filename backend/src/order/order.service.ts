@@ -291,12 +291,52 @@ export class OrderService {
                 selectedCartItemIds: items.map((item) => item.id),
                 displayAmount: displayTotalAmount,
                 displayCurrencyCode: totals.displayCurrency.code,
+                stockReserved: true,
               },
             },
           },
         },
         include: this.orderInclude(),
       });
+
+      for (const item of items) {
+        await tx.productVariant.update({
+          where: {
+            id: item.variantId,
+          },
+          data: {
+            stockQuantity: {
+              decrement: item.quantity,
+            },
+          },
+        });
+      }
+
+      await tx.cartItem.deleteMany({
+        where: {
+          cartId: cart.id,
+          id: {
+            in: items.map((item) => item.id),
+          },
+        },
+      });
+
+      const remainingItems = await tx.cartItem.count({
+        where: {
+          cartId: cart.id,
+        },
+      });
+
+      if (remainingItems === 0) {
+        await tx.cart.update({
+          where: {
+            id: cart.id,
+          },
+          data: {
+            status: CartStatus.CONVERTED,
+          },
+        });
+      }
 
       return this.toOrderView(order);
     });
@@ -341,7 +381,10 @@ export class OrderService {
         throw new NotFoundException('Payment transaction not found');
       }
 
-      if (existingPayment.status !== PaymentStatus.SUCCEEDED) {
+      if (
+        existingPayment.status !== PaymentStatus.SUCCEEDED &&
+        !this.hasReservedStock(existingPayment.metadata)
+      ) {
         for (const item of order.items) {
           await tx.productVariant.update({
             where: {
@@ -446,6 +489,37 @@ export class OrderService {
     });
   }
 
+  async markPaymentFailed(orderId: string, reason?: string | null) {
+    const order = await this.getOrder(orderId);
+
+    if (
+      order.status !== OrderStatus.PENDING_PAYMENT &&
+      order.status !== OrderStatus.PAYMENT_FAILED
+    ) {
+      return this.toOrderView(order);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.changeOrderStatus(
+        tx,
+        order.id,
+        order.status,
+        OrderStatus.PAYMENT_FAILED,
+        order.userId,
+        reason ?? 'Payment failed',
+      );
+
+      const updatedOrder = await tx.order.findUnique({
+        where: {
+          id: order.id,
+        },
+        include: this.orderInclude(),
+      });
+
+      return updatedOrder ? this.toOrderView(updatedOrder) : null;
+    });
+  }
+
   async requestCancellation(
     userId: string,
     orderId: string,
@@ -514,6 +588,10 @@ export class OrderService {
     const order = await this.getOrder(orderId);
 
     return this.prisma.$transaction(async (tx) => {
+      if (dto.status === OrderStatus.CANCELLED) {
+        await this.restockOrderItemsForCancellation(tx, order);
+      }
+
       await this.changeOrderStatus(
         tx,
         orderId,
@@ -542,6 +620,47 @@ export class OrderService {
     });
   }
 
+  async deleteUnpaidOrder(adminUserId: string, orderId: string) {
+    const order = await this.getOrder(orderId);
+
+    if (
+      order.status !== OrderStatus.PENDING_PAYMENT &&
+      order.status !== OrderStatus.PAYMENT_FAILED
+    ) {
+      throw new BadRequestException(
+        'Only pending or failed payment orders can be deleted',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.restockOrderItemsForCancellation(tx, order);
+      await tx.paymentTransaction.deleteMany({
+        where: {
+          orderId,
+        },
+      });
+      await tx.notification.updateMany({
+        where: {
+          orderId,
+        },
+        data: {
+          orderId: null,
+        },
+      });
+      await tx.order.delete({
+        where: {
+          id: orderId,
+        },
+      });
+
+      return {
+        deleted: true,
+        orderId,
+        deletedByUserId: adminUserId,
+      };
+    });
+  }
+
   async decideCancellation(
     adminUserId: string,
     requestId: string,
@@ -555,6 +674,7 @@ export class OrderService {
         order: {
           include: {
             items: true,
+            payments: true,
           },
         },
       },
@@ -587,18 +707,7 @@ export class OrderService {
       });
 
       if (dto.status === CancellationRequestStatus.APPROVED) {
-        for (const item of request.order.items) {
-          await tx.productVariant.update({
-            where: {
-              id: item.variantId,
-            },
-            data: {
-              stockQuantity: {
-                increment: item.quantity,
-              },
-            },
-          });
-        }
+        await this.restockOrderItemsForCancellation(tx, request.order);
 
         await tx.shipment.updateMany({
           where: {
@@ -1044,6 +1153,48 @@ export class OrderService {
         },
       });
     }
+  }
+
+  private async restockOrderItemsForCancellation(tx: any, order: any) {
+    if (!this.shouldRestockOnCancellation(order)) {
+      return;
+    }
+
+    for (const item of order.items) {
+      await tx.productVariant.update({
+        where: {
+          id: item.variantId,
+        },
+        data: {
+          stockQuantity: {
+            increment: item.quantity,
+          },
+        },
+      });
+    }
+  }
+
+  private shouldRestockOnCancellation(order: any) {
+    if (order.status === OrderStatus.CANCELLED) {
+      return false;
+    }
+
+    const payments = Array.isArray(order.payments) ? order.payments : [];
+
+    return payments.some(
+      (payment: any) =>
+        payment.status === PaymentStatus.SUCCEEDED ||
+        this.hasReservedStock(payment.metadata),
+    );
+  }
+
+  private hasReservedStock(metadata: unknown) {
+    return (
+      typeof metadata === 'object' &&
+      metadata !== null &&
+      !Array.isArray(metadata) &&
+      (metadata as { stockReserved?: unknown }).stockReserved === true
+    );
   }
 
   private async markShipmentStatus(

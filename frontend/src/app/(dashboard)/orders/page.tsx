@@ -9,6 +9,78 @@ import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
 
 const pageSize = 10;
+const repayableStatuses = ["PENDING_PAYMENT", "PAYMENT_FAILED"] as const;
+
+type RazorpayCheckoutResponse = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayCheckoutOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  prefill: {
+    email: string;
+    contact?: string;
+  };
+  notes: {
+    localOrderId: string;
+    orderNumber: string;
+  };
+  theme: {
+    color: string;
+  };
+  handler: (response: RazorpayCheckoutResponse) => void;
+  modal: {
+    ondismiss: () => void;
+  };
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => {
+      open: () => void;
+      on: (
+        event: "payment.failed",
+        handler: (response: { error?: { description?: string } }) => void,
+      ) => void;
+    };
+  }
+}
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://checkout.razorpay.com/v1/checkout.js"]',
+    );
+
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("Unable to load Razorpay checkout")),
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load Razorpay checkout"));
+    document.body.appendChild(script);
+  });
+}
 
 function formatStatus(status: string) {
   return status.replaceAll("_", " ").toLowerCase();
@@ -33,6 +105,7 @@ export default function OrdersPage() {
     useState<customerApi.CustomerOrdersResponse | null>(null);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const orders = response?.items ?? [];
@@ -66,6 +139,96 @@ export default function OrdersPage() {
   useEffect(() => {
     void Promise.resolve().then(loadOrders);
   }, [loadOrders]);
+
+  async function handleRepay(order: customerApi.CustomerOrder) {
+    if (!accessToken) {
+      return;
+    }
+
+    setPayingOrderId(order.id);
+    setError(null);
+
+    try {
+      await loadRazorpayCheckout();
+
+      if (!window.Razorpay) {
+        throw new Error("Unable to load Razorpay checkout");
+      }
+
+      const razorpayOrder = await customerApi.retryRazorpayPayment(
+        accessToken,
+        order.id,
+      );
+      const checkout = new window.Razorpay({
+        key: razorpayOrder.keyId,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        name: "BlueWave Skincare",
+        description: `Order ${razorpayOrder.orderNumber}`,
+        order_id: razorpayOrder.razorpayOrderId,
+        prefill: {
+          email: razorpayOrder.customerEmail,
+          contact: razorpayOrder.customerPhone ?? order.customerPhone ?? undefined,
+        },
+        notes: {
+          localOrderId: razorpayOrder.localOrderId,
+          orderNumber: razorpayOrder.orderNumber,
+        },
+        theme: {
+          color: "#1868db",
+        },
+        handler: (response) => {
+          void verifyRetryPayment(razorpayOrder.localOrderId, response);
+        },
+        modal: {
+          ondismiss: () => {
+            setPayingOrderId(null);
+          },
+        },
+      });
+
+      checkout.on("payment.failed", (response) => {
+        setError(response.error?.description ?? "Razorpay payment failed");
+        setPayingOrderId(null);
+      });
+      checkout.open();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to restart Razorpay payment",
+      );
+      setPayingOrderId(null);
+    }
+  }
+
+  async function verifyRetryPayment(
+    localOrderId: string,
+    response: RazorpayCheckoutResponse,
+  ) {
+    if (!accessToken) {
+      setPayingOrderId(null);
+      return;
+    }
+
+    try {
+      await customerApi.verifyRazorpayPayment(accessToken, {
+        localOrderId,
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
+      });
+      await loadOrders();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to verify Razorpay payment",
+      );
+    } finally {
+      setPayingOrderId(null);
+    }
+  }
 
   return (
     <UserShell>
@@ -105,9 +268,25 @@ export default function OrdersPage() {
                         {formatStatus(order.status)}
                       </p>
                     </div>
-                    <Link href={`/orders/${order.id}`}>
-                      Order details <span aria-hidden="true">-&gt;</span>
-                    </Link>
+                    <div className="order-detail-actions">
+                      {repayableStatuses.includes(
+                        order.status as (typeof repayableStatuses)[number],
+                      ) ? (
+                        <button
+                          className="primary-button compact-button"
+                          disabled={payingOrderId === order.id}
+                          type="button"
+                          onClick={() => void handleRepay(order)}
+                        >
+                          {payingOrderId === order.id
+                            ? "Opening Razorpay..."
+                            : "Pay Now"}
+                        </button>
+                      ) : null}
+                      <Link href={`/orders/${order.id}`}>
+                        Order details <span aria-hidden="true">-&gt;</span>
+                      </Link>
+                    </div>
                   </div>
 
                   <div className="customer-order-products">
