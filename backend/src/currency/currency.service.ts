@@ -276,16 +276,81 @@ export class CurrencyService {
   }
 
   async updateExchangeRate(id: string, dto: UpdateExchangeRateDto) {
+    const exchangeRate = await this.ensureExchangeRateExists(id);
+    const baseCurrencyCode = dto.baseCurrencyCode
+      ? this.normalizeCurrencyCode(dto.baseCurrencyCode)
+      : exchangeRate.baseCurrencyCode;
+    const quoteCurrencyCode = dto.quoteCurrencyCode
+      ? this.normalizeCurrencyCode(dto.quoteCurrencyCode)
+      : exchangeRate.quoteCurrencyCode;
+    const rate = dto.rate ?? exchangeRate.rate;
+    const provider =
+      dto.provider !== undefined ? dto.provider.trim() : exchangeRate.provider;
+    const effectiveAt = dto.effectiveAt
+      ? new Date(dto.effectiveAt)
+      : exchangeRate.effectiveAt;
+    const expiresAt =
+      dto.expiresAt !== undefined
+        ? dto.expiresAt
+          ? new Date(dto.expiresAt)
+          : null
+        : exchangeRate.expiresAt;
+
+    if (baseCurrencyCode === quoteCurrencyCode) {
+      throw new BadRequestException(
+        'Base and quote currency must be different',
+      );
+    }
+
+    if (Number(rate) <= 0) {
+      throw new BadRequestException('Exchange rate must be greater than 0');
+    }
+
+    if (!provider) {
+      throw new BadRequestException('Provider is required');
+    }
+
+    if (expiresAt && expiresAt <= effectiveAt) {
+      throw new BadRequestException(
+        'Expiry date must be later than effective date',
+      );
+    }
+
+    await Promise.all([
+      this.ensureActiveCurrency(baseCurrencyCode),
+      this.ensureActiveCurrency(quoteCurrencyCode),
+    ]);
+
+    return this.prisma.exchangeRate
+      .update({
+        where: {
+          id,
+        },
+        data: {
+          baseCurrencyCode,
+          quoteCurrencyCode,
+          rate,
+          provider,
+          effectiveAt,
+          expiresAt,
+        },
+        include: {
+          baseCurrency: true,
+          quoteCurrency: true,
+        },
+      })
+      .catch((error: unknown) => {
+        this.handleUniqueExchangeRateError(error);
+        throw error;
+      });
+  }
+
+  async deleteExchangeRate(id: string) {
     await this.ensureExchangeRateExists(id);
 
-    return this.prisma.exchangeRate.update({
+    return this.prisma.exchangeRate.delete({
       where: {
         id,
-      },
-      data: {
-        ...(dto.expiresAt !== undefined && {
-          expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
-        }),
       },
       include: {
         baseCurrency: true,
@@ -366,14 +431,13 @@ export class CurrencyService {
       where: {
         id,
       },
-      select: {
-        id: true,
-      },
     });
 
     if (!exchangeRate) {
       throw new NotFoundException('Exchange rate not found');
     }
+
+    return exchangeRate;
   }
 
   private normalizeCurrencyCode(code: string): string {

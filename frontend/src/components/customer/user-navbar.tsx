@@ -146,7 +146,13 @@ export function UserNavbar() {
   }, []);
 
   useEffect(() => {
-    setSearchQuery(searchParams.get("q") ?? "");
+    const timeoutId = window.setTimeout(() => {
+      setSearchQuery(searchParams.get("q") ?? "");
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [searchParams]);
 
   useEffect(() => {
@@ -226,9 +232,7 @@ export function UserNavbar() {
             <Link className={pathname === "/" ? "active" : undefined} href="/">
               Home
             </Link>
-            <div
-              className="explore-menu"
-            >
+            <div className="explore-menu">
               <button
                 className="explore-trigger"
                 type="button"
@@ -306,7 +310,7 @@ export function UserNavbar() {
           </div>
 
           <div className="user-nav-actions">
-            <label className="currency-picker">
+            <label className="currency-picker desktop-currency-picker">
               <select
                 aria-label="Select currency"
                 value={selectedCurrency?.code ?? ""}
@@ -315,7 +319,6 @@ export function UserNavbar() {
               >
                 {currencies.map((currency) => (
                   <option value={currency.code} key={currency.code}>
-                    {/* {currency.symbol ? `${currency.symbol} ` : ""} */}
                     {currency.code}
                   </option>
                 ))}
@@ -330,7 +333,10 @@ export function UserNavbar() {
             >
               <MenuIcon />
             </button>
-            <form className="nav-search-form" onSubmit={handleSearchSubmit}>
+            <form
+              className="nav-search-form desktop-nav-search"
+              onSubmit={handleSearchSubmit}
+            >
               <input
                 aria-label="Search products"
                 placeholder="Search"
@@ -392,6 +398,38 @@ export function UserNavbar() {
 
         {isMobileOpen ? (
           <div className="mobile-nav-panel">
+            <div className="mobile-nav-controls">
+              <form
+                className="nav-search-form mobile-nav-search"
+                onSubmit={handleSearchSubmit}
+              >
+                <input
+                  aria-label="Search products"
+                  placeholder="Search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+                <button type="submit" aria-label="Search">
+                  <SearchIcon />
+                </button>
+              </form>
+              <label className="currency-picker mobile-currency-picker">
+                <select
+                  aria-label="Select currency"
+                  value={selectedCurrency?.code ?? ""}
+                  disabled={isLoadingCurrencies || currencies.length === 0}
+                  onChange={(event) =>
+                    setSelectedCurrencyCode(event.target.value)
+                  }
+                >
+                  {currencies.map((currency) => (
+                    <option value={currency.code} key={currency.code}>
+                      {currency.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <Link href="/" onClick={closeMenus}>
               Home
             </Link>

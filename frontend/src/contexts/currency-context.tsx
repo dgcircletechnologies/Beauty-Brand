@@ -37,31 +37,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     async function loadCurrencies() {
-      const storedCurrencies = window.localStorage.getItem(
-        CURRENCIES_STORAGE_KEY,
-      );
-      const storedSelectedCurrency = window.localStorage.getItem(
-        SELECTED_CURRENCY_STORAGE_KEY,
-      );
-
-      if (storedCurrencies) {
-        try {
-          const parsedCurrencies = JSON.parse(
-            storedCurrencies,
-          ) as customerApi.CustomerCurrency[];
-
-          if (parsedCurrencies.length) {
-            setCurrencies(parsedCurrencies);
-            setSelectedCurrencyCodeState(
-              storedSelectedCurrency || parsedCurrencies[0].code,
-            );
-            setIsLoadingCurrencies(false);
-            return;
-          }
-        } catch {
-          window.localStorage.removeItem(CURRENCIES_STORAGE_KEY);
-        }
-      }
+      window.localStorage.removeItem(CURRENCIES_STORAGE_KEY);
+      window.localStorage.removeItem(SELECTED_CURRENCY_STORAGE_KEY);
 
       try {
         const nextCurrencies = await customerApi.getCurrencies();
@@ -71,27 +48,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         }
 
         setCurrencies(nextCurrencies);
-        window.localStorage.setItem(
-          CURRENCIES_STORAGE_KEY,
-          JSON.stringify(nextCurrencies),
-        );
-
-        const nextSelectedCurrency =
-          storedSelectedCurrency &&
-          nextCurrencies.some(
-            (currency) => currency.code === storedSelectedCurrency,
-          )
-            ? storedSelectedCurrency
-            : nextCurrencies[0]?.code;
+        const nextSelectedCurrency = nextCurrencies[0]?.code;
 
         setSelectedCurrencyCodeState(nextSelectedCurrency ?? null);
-
-        if (nextSelectedCurrency) {
-          window.localStorage.setItem(
-            SELECTED_CURRENCY_STORAGE_KEY,
-            nextSelectedCurrency,
-          );
-        }
       } finally {
         if (isMounted) {
           setIsLoadingCurrencies(false);
@@ -121,7 +80,6 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       }
 
       setSelectedCurrencyCodeState(code);
-      window.localStorage.setItem(SELECTED_CURRENCY_STORAGE_KEY, code);
     },
     [currencies],
   );

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import { CurrencyService } from '../currency.service';
@@ -48,5 +56,11 @@ export class AdminCurrencyController {
     @Body() dto: UpdateExchangeRateDto,
   ) {
     return this.currencyService.updateExchangeRate(id, dto);
+  }
+
+  @Delete('exchange-rates/:id')
+  @ResponseMessage('Exchange rate deleted successfully')
+  deleteExchangeRate(@Param('id') id: string) {
+    return this.currencyService.deleteExchangeRate(id);
   }
 }

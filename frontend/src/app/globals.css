@@ -809,6 +809,23 @@ p {
   padding-block: 14px;
 }
 
+.mobile-nav-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding-bottom: 10px;
+}
+
+.mobile-nav-search {
+  width: 100%;
+  min-width: 0;
+}
+
+.mobile-currency-picker select {
+  max-width: 96px;
+}
+
 .mobile-nav-panel a {
   min-height: 40px;
   display: flex;
@@ -949,6 +966,17 @@ p {
   font-size: 22px;
   line-height: 1;
   text-decoration: none;
+}
+
+.home-hero-button svg,
+.home-browse-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .home-hero-button:hover {
@@ -1253,16 +1281,16 @@ p {
 .home-feature-heading h2 {
   max-width: 540px;
   color: #09090b;
+  font-family: var(--font-playfair-display), Georgia, serif;
   font-size: clamp(48px, 5.8vw, 80px);
-  font-weight: 600;
+  font-style: italic;
+  font-weight: 400;
   letter-spacing: 0;
   line-height: 1;
 }
 
 .home-feature-heading h2 [data-slot="italic"] {
-  font-family: var(--font-playfair-display), Georgia, serif;
-  font-style: italic;
-  font-weight: 400;
+  font: inherit;
 }
 
 .home-feature-copy {
@@ -4898,7 +4926,7 @@ p {
 
 .exchange-rate-card {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto auto;
+  grid-template-columns: minmax(180px, 1fr) auto auto auto auto;
   gap: 12px;
   align-items: center;
   border: 1px solid var(--line);
@@ -6815,8 +6843,9 @@ button.attribute-view-select {
   }
 
   .account-menu-panel {
-    left: 0;
-    right: auto;
+    left: auto;
+    right: 0;
+    max-width: calc(100vw - 28px);
   }
 
   .dashboard-metrics {
@@ -6933,6 +6962,13 @@ button.attribute-view-select {
     grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1fr);
     gap: clamp(40px, 6vw, 96px);
     align-items: start;
+  }
+}
+
+@media (max-width: 1023px) {
+  .desktop-currency-picker,
+  .desktop-nav-search {
+    display: none;
   }
 }
 
@@ -7137,6 +7173,11 @@ button.attribute-view-select {
     min-width: 92px;
   }
 
+  .mobile-nav-search {
+    width: 100%;
+    min-width: 0;
+  }
+
   .nav-search-form input {
     padding-left: 10px;
     font-size: 12px;
@@ -7146,6 +7187,10 @@ button.attribute-view-select {
     max-width: 82px;
     min-height: 34px;
     padding-inline: 10px 24px;
+  }
+
+  .mobile-currency-picker select {
+    max-width: 96px;
   }
 
   .home-hero-copy {

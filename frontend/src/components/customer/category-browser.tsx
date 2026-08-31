@@ -6,6 +6,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
 
+function ButtonArrowIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M7 17 17 7M9 7h8v8" />
+    </svg>
+  );
+}
+
 function getCategoryImage(category: customerApi.CustomerCategory) {
   return category.images?.[0] ?? null;
 }
@@ -135,7 +143,9 @@ export function HomeCategorySection() {
         <div className="home-category-actions">
           <Link className="home-browse-button" href="/categories">
             Browse all
-            <span aria-hidden="true">+</span>
+            <span aria-hidden="true">
+              <ButtonArrowIcon />
+            </span>
           </Link>
           <div className="home-carousel-buttons" aria-label="Category carousel">
             <button

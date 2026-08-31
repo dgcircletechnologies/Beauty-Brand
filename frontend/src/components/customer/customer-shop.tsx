@@ -535,9 +535,7 @@ export function CustomerShop() {
       </div>
 
       <section className="shop-hero">
-        <span className="shop-star" aria-hidden="true">
-          *
-        </span>
+        
         <h1>
           <span>Shop</span>
           <br />

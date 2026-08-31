@@ -30,6 +30,14 @@ const tagBadgeThemes = [
   "gold",
 ] as const;
 
+function ButtonArrowIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M7 17 17 7M9 7h8v8" />
+    </svg>
+  );
+}
+
 function getPrimaryPrice(product: customerApi.CustomerProduct) {
   return product.variants?.[0]?.price ?? "0";
 }
@@ -224,7 +232,9 @@ function HomeProductsSection() {
       <div className="home-section-heading">
         <Link className="home-browse-button" href="/shop">
           Shop all
-          <span aria-hidden="true">+</span>
+          <span aria-hidden="true">
+            <ButtonArrowIcon />
+          </span>
         </Link>
         <div>
           <p className="eyebrow">Products</p>
@@ -284,7 +294,9 @@ export function HomeExperience() {
           <p>{hero.description}</p>
           <Link className="home-hero-button" href="/shop">
             Explore products
-            <span aria-hidden="true">+</span>
+            <span aria-hidden="true">
+              <ButtonArrowIcon />
+            </span>
           </Link>
         </div>
         <div className="home-hero-media">

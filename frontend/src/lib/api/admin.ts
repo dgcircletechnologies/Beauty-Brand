@@ -598,6 +598,12 @@ export type CreateAdminExchangeRatePayload = {
   expiresAt?: string;
 };
 
+export type UpdateAdminExchangeRatePayload = Partial<
+  Omit<CreateAdminExchangeRatePayload, "expiresAt">
+> & {
+  expiresAt?: string | null;
+};
+
 function withAuth(accessToken: string) {
   return {
     Authorization: `Bearer ${accessToken}`,
@@ -1473,6 +1479,31 @@ export function createAdminExchangeRate(
     headers: withAuth(accessToken),
     body: JSON.stringify(payload),
   });
+}
+
+export function updateAdminExchangeRate(
+  accessToken: string,
+  rateId: string,
+  payload: UpdateAdminExchangeRatePayload,
+) {
+  return apiRequest<AdminExchangeRate>(
+    `/admin/currencies/exchange-rates/${rateId}`,
+    {
+      method: "PATCH",
+      headers: withAuth(accessToken),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminExchangeRate(accessToken: string, rateId: string) {
+  return apiRequest<AdminExchangeRate>(
+    `/admin/currencies/exchange-rates/${rateId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
 }
 
 export function getAdminShippingZones(accessToken: string) {
