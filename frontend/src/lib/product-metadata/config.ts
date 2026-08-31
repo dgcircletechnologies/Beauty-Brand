@@ -50,6 +50,12 @@ export const productMetadataConfigs: ProductMetadataConfig[] = [
     pluralLabel: "Benefits",
     description: "Reusable benefit claims for product discovery.",
   },
+  {
+    resource: "tags",
+    singularLabel: "Tag",
+    pluralLabel: "Tags",
+    description: "Campaign labels such as bestseller, new launch, and offers.",
+  },
 ];
 
 export function getProductMetadataConfig(resource: string) {

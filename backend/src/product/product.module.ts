@@ -15,8 +15,10 @@ import {
 } from './admin/admin-product-image.controller';
 import { AdminProductVariantController } from './admin/admin-product-variant.controller';
 import { CloudinaryProductImageService } from './cloudinary-product-image.service';
+import { CustomerProductReviewController } from './customer/customer-product-review.controller';
 import { ProductImageService } from './product-image.service';
 import { ProductMetadataService } from './product-metadata.service';
+import { ProductReviewService } from './product-review.service';
 import { ProductService } from './product.service';
 import { ProductPublicController } from './public/public-product.controller';
 import { ProductVariantService } from './variant/product-variant.service';
@@ -30,11 +32,13 @@ import { ProductVariantService } from './variant/product-variant.service';
     AdminVariantImageController,
     AdminProductVariantController,
     AdminProductMetadataController,
+    CustomerProductReviewController,
   ],
   providers: [
     ProductService,
     ProductVariantService,
     ProductMetadataService,
+    ProductReviewService,
     ProductImageService,
     CloudinaryProductImageService,
   ],
@@ -42,6 +46,7 @@ import { ProductVariantService } from './variant/product-variant.service';
     ProductService,
     ProductVariantService,
     ProductMetadataService,
+    ProductReviewService,
     ProductImageService,
   ],
 })
@@ -59,5 +64,9 @@ export class ProductModule implements NestModule {
         AdminProductVariantController,
         AdminProductMetadataController,
       );
+
+    consumer
+      .apply(AccessTokenMiddleware, allowRoles(UserRole.CUSTOMER))
+      .forRoutes(CustomerProductReviewController);
   }
 }

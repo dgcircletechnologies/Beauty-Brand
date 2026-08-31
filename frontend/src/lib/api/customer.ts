@@ -31,7 +31,7 @@ export type CustomerMetadataItem = {
   id: string;
   name: string;
   slug: string;
-  description: string | null;
+  description?: string | null;
   inciName?: string | null;
   benefits?: string | null;
   warnings?: string | null;
@@ -95,6 +95,23 @@ export type CustomerProductAttributeValue = {
   } | null;
 };
 
+export type CustomerProductReview = {
+  id?: string;
+  rating: number;
+  title?: string | null;
+  body?: string | null;
+  status?: string;
+  isVerifiedPurchase?: boolean;
+  publishedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string | null;
+  };
+};
+
 export type CustomerProduct = {
   id: string;
   name: string;
@@ -104,6 +121,8 @@ export type CustomerProduct = {
   usageInstructions?: string | null;
   warnings?: string | null;
   isFeatured: boolean;
+  averageRating?: number;
+  reviewCount?: number;
   images?: CustomerProductImage[];
   variants?: CustomerProductVariant[];
   categories?: CustomerProductCategory[];
@@ -114,6 +133,8 @@ export type CustomerProduct = {
   hairProfiles?: { hairProfile: CustomerMetadataItem }[];
   concerns?: { concern: CustomerMetadataItem }[];
   productBenefits?: { benefit: CustomerMetadataItem }[];
+  tags?: { tag: CustomerMetadataItem }[];
+  reviews?: CustomerProductReview[];
   attributeValues?: CustomerProductAttributeValue[];
 };
 
@@ -544,6 +565,18 @@ export async function getCustomerProducts() {
 
 export function getCustomerProduct(slug: string) {
   return apiRequest<CustomerProduct>(`/products/${slug}`);
+}
+
+export function submitProductReview(
+  accessToken: string,
+  productId: string,
+  payload: { rating: number; title?: string; body: string },
+) {
+  return apiRequest<CustomerProductReview>(`/products/${productId}/reviews`, {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getCustomerCategories() {

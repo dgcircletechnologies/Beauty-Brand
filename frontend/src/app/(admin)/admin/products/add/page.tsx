@@ -70,6 +70,7 @@ const defaultMetadata: AdminProductMetadataOptions = {
   hairProfiles: [],
   concerns: [],
   benefits: [],
+  tags: [],
   categories: [],
 };
 
@@ -106,6 +107,7 @@ export default function AddProductPage() {
   >([]);
   const [selectedConcernIds, setSelectedConcernIds] = useState<string[]>([]);
   const [selectedBenefitIds, setSelectedBenefitIds] = useState<string[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [attributeValues, setAttributeValues] = useState<
     Record<string, AttributeFormValue>
   >({});
@@ -545,6 +547,7 @@ export default function AddProductPage() {
         hairProfileIds: selectedHairProfileIds,
         concernIds: selectedConcernIds,
         benefitIds: selectedBenefitIds,
+        tagIds: selectedTagIds,
       });
 
       await Promise.all([
@@ -900,6 +903,13 @@ export default function AddProductPage() {
                 }
                 selectedIds={selectedBenefitIds}
                 title="Benefits"
+              />
+              <MetadataPicker
+                items={metadata.tags}
+                onRemove={(id) => removeListValue(id, selectedTagIds, setSelectedTagIds)}
+                onSelect={(id) => addListValue(id, selectedTagIds, setSelectedTagIds)}
+                selectedIds={selectedTagIds}
+                title="Tags"
               />
             </div>
           </FormBlock>

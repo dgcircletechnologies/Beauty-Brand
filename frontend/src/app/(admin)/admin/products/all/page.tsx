@@ -18,6 +18,8 @@ import {
   AdminCategory,
   AdminProduct,
   AdminProductDetail,
+  AdminProductMetadataItem,
+  AdminProductMetadataOptions,
   AdminProductVariant,
   assignAdminVariantImages,
   createAdminProductVariant,
@@ -26,6 +28,7 @@ import {
   deleteAdminProductVariant,
   getAdminCategories,
   getAdminProduct,
+  getAdminProductMetadataOptions,
   getAdminProducts,
   updateAdminProduct,
   updateAdminProductImage,
@@ -46,6 +49,7 @@ type ProductEditValues = {
   warnings: string;
   status: AdminProduct["status"];
   isFeatured: boolean;
+  tagIds: string[];
 };
 
 type VariantEditValues = {
@@ -61,9 +65,23 @@ type ImageDraft = {
   previewUrl: string;
 };
 
+const emptyMetadataOptions: AdminProductMetadataOptions = {
+  ingredients: [],
+  audiences: [],
+  skinTypes: [],
+  ageGroups: [],
+  hairProfiles: [],
+  concerns: [],
+  benefits: [],
+  tags: [],
+  categories: [],
+};
+
 export default function AllProductsPage() {
   const { accessToken } = useAuth();
   const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [metadataOptions, setMetadataOptions] =
+    useState<AdminProductMetadataOptions>(emptyMetadataOptions);
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [selectedProduct, setSelectedProduct] =
     useState<AdminProductDetail | null>(null);
@@ -117,16 +135,19 @@ export default function AllProductsPage() {
       setIsLoading(true);
 
       try {
-        const [nextCategories, nextProducts] = await Promise.all([
-          getAdminCategories(token),
-          getAdminProducts(token),
-        ]);
+        const [nextCategories, nextProducts, nextMetadataOptions] =
+          await Promise.all([
+            getAdminCategories(token),
+            getAdminProducts(token),
+            getAdminProductMetadataOptions(token),
+          ]);
 
         if (!isMounted) {
           return;
         }
 
         setCategories(nextCategories);
+        setMetadataOptions(nextMetadataOptions);
         setProducts(nextProducts);
       } catch (caughtError) {
         if (!isMounted) {
@@ -257,6 +278,7 @@ export default function AllProductsPage() {
             warnings: productEditValues.warnings || undefined,
             status: productEditValues.status,
             isFeatured: productEditValues.isFeatured,
+            tagIds: productEditValues.tagIds,
           },
         );
 
@@ -884,6 +906,13 @@ export default function AllProductsPage() {
                     {selectedProduct.shortDescription ?? selectedProduct.slug}
                   </p>
                   <small>{selectedProduct.slug}</small>
+                  {selectedProduct.tags?.length ? (
+                    <span className="admin-product-card-tags">
+                      {selectedProduct.tags
+                        .map((tagLink) => tagLink.tag.name)
+                        .join(", ")}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="row-actions">
                   <button
@@ -990,6 +1019,7 @@ export default function AllProductsPage() {
           imageDrafts={imageDrafts}
           isImageSubmitting={isImageSubmitting}
           product={selectedProduct}
+          tagOptions={metadataOptions.tags}
           values={productEditValues}
           onAddImageDrafts={addImageDrafts}
           onCancel={closeProductEdit}
@@ -1073,6 +1103,11 @@ const ProductCard = memo(function ProductCard({
               .map((categoryLink) => categoryLink.category.name)
               .join(", ") || "Uncategorized"}
           </span>
+          {product.tags?.length ? (
+            <span className="admin-product-card-tags">
+              {product.tags.map((tagLink) => tagLink.tag.name).join(", ")}
+            </span>
+          ) : null}
         </span>
       </button>
     </article>
@@ -1142,6 +1177,7 @@ type ProductEditFormProps = {
   imageDrafts: ImageDraft[];
   isImageSubmitting: boolean;
   product: AdminProductDetail;
+  tagOptions: AdminProductMetadataItem[];
   values: ProductEditValues;
   onAddImageDrafts: (files: File[]) => void;
   onCancel: () => void;
@@ -1159,6 +1195,7 @@ const ProductEditForm = memo(function ProductEditForm({
   imageDrafts,
   isImageSubmitting,
   product,
+  tagOptions,
   values,
   onAddImageDrafts,
   onCancel,
@@ -1246,6 +1283,25 @@ const ProductEditForm = memo(function ProductEditForm({
           Featured product
         </label>
       </div>
+      <MetadataPicker
+        items={tagOptions}
+        selectedIds={values.tagIds}
+        title="Tags"
+        onRemove={(tagId) =>
+          onChange({
+            tagIds: values.tagIds.filter((currentTagId) => currentTagId !== tagId),
+          })
+        }
+        onSelect={(tagId) => {
+          if (!tagId || values.tagIds.includes(tagId)) {
+            return;
+          }
+
+          onChange({
+            tagIds: [...values.tagIds, tagId],
+          });
+        }}
+      />
       <div className="form-actions">
         <button className="primary-button" disabled={disabled} type="submit">
           {disabled ? "Saving..." : "Save Product"}
@@ -1359,6 +1415,62 @@ const ProductEditModal = memo(function ProductEditModal({
     </div>
   );
 });
+
+function MetadataPicker({
+  items,
+  onRemove,
+  onSelect,
+  selectedIds,
+  title,
+}: {
+  items: AdminProductMetadataItem[];
+  onRemove: (id: string) => void;
+  onSelect: (id: string) => void;
+  selectedIds: string[];
+  title: string;
+}) {
+  const activeItems = items.filter((item) => item.isActive);
+
+  return (
+    <div className="metadata-picker">
+      <label>
+        {title}
+        <select value="" onChange={(event) => onSelect(event.target.value)}>
+          <option value="">Select {title.toLowerCase()}</option>
+          {activeItems
+            .filter((item) => !selectedIds.includes(item.id))
+            .map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+        </select>
+      </label>
+      {activeItems.length === 0 ? <p className="muted-text">No options.</p> : null}
+      <div className="selected-pill-list">
+        {selectedIds.map((id) => {
+          const item = activeItems.find((activeItem) => activeItem.id === id);
+
+          if (!item) {
+            return null;
+          }
+
+          return (
+            <button
+              className="selected-pill"
+              key={id}
+              type="button"
+              onClick={() => onRemove(id)}
+            >
+              {item.name}
+              <span aria-hidden="true">x</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 type VariantRowProps = {
   disabled: boolean;
@@ -1711,6 +1823,7 @@ function getEmptyProductEditValues(): ProductEditValues {
     warnings: "",
     status: "DRAFT",
     isFeatured: false,
+    tagIds: [],
   };
 }
 
@@ -1723,6 +1836,7 @@ function getProductEditValues(product: AdminProductDetail): ProductEditValues {
     warnings: product.warnings ?? "",
     status: product.status,
     isFeatured: product.isFeatured,
+    tagIds: product.tags?.map((tagLink) => tagLink.tag.id) ?? [],
   };
 }
 

@@ -89,6 +89,7 @@ export type AdminProduct = {
   createdAt: string;
   updatedAt: string;
   categories: AdminProductCategory[];
+  tags?: { tag: AdminProductMetadataItem }[];
   images?: AdminProductImage[];
 };
 
@@ -128,6 +129,7 @@ export type UpdateAdminProductPayload = {
   hairProfileIds?: string[];
   concernIds?: string[];
   benefitIds?: string[];
+  tagIds?: string[];
 };
 
 export type UpdateAdminProductVariantPayload = {
@@ -288,13 +290,14 @@ export type ProductMetadataResource =
   | "audiences"
   | "hair-profiles"
   | "concerns"
-  | "benefits";
+  | "benefits"
+  | "tags";
 
 export type AdminProductMetadataItem = {
   id: string;
   name: string;
   slug: string;
-  description: string | null;
+  description?: string | null;
   isActive: boolean;
   deletedAt?: string | null;
   createdAt: string;
@@ -326,6 +329,7 @@ export type AdminProductMetadataOptions = {
   hairProfiles: AdminProductMetadataItem[];
   concerns: AdminProductMetadataItem[];
   benefits: AdminProductMetadataItem[];
+  tags: AdminProductMetadataItem[];
   categories: AdminCategory[];
 };
 
@@ -353,6 +357,7 @@ export type CreateAdminProductPayload = {
   hairProfileIds?: string[];
   concernIds?: string[];
   benefitIds?: string[];
+  tagIds?: string[];
 };
 
 export type AssignProductCategoryPayload = {

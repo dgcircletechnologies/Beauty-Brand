@@ -83,4 +83,11 @@ export class ProductRelationsDto {
     each: true,
   })
   benefitIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({
+    each: true,
+  })
+  tagIds?: string[];
 }

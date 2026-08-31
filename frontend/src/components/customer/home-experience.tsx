@@ -22,8 +22,59 @@ const fallbackProductImages = [
   "/images/skincare/face-4.webp",
 ];
 
+const tagBadgeThemes = [
+  "coral",
+  "sage",
+  "ink",
+  "rose",
+  "gold",
+] as const;
+
 function getPrimaryPrice(product: customerApi.CustomerProduct) {
   return product.variants?.[0]?.price ?? "0";
+}
+
+function getDisplayRating(product: customerApi.CustomerProduct) {
+  if (typeof product.averageRating === "number") {
+    return product.averageRating;
+  }
+
+  const reviews = product.reviews ?? [];
+
+  if (!reviews.length) {
+    return 0;
+  }
+
+  const total = reviews.reduce((sum, review) => sum + review.rating, 0);
+
+  return Number((total / reviews.length).toFixed(1));
+}
+
+function getTagBadgeTheme(slug: string) {
+  const hash = slug
+    .split("")
+    .reduce((total, character) => total + character.charCodeAt(0), 0);
+
+  return tagBadgeThemes[hash % tagBadgeThemes.length];
+}
+
+function RatingStars({ rating, count }: { rating: number; count: number }) {
+  const roundedRating = Math.round(rating);
+
+  return (
+    <span className="product-rating-row" aria-label={`${rating} out of 5 stars`}>
+      <span className="rating-stars" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, index) => (
+          <span className={index < roundedRating ? "filled" : undefined} key={index}>
+            ★
+          </span>
+        ))}
+      </span>
+      <span className="rating-count">
+        {count ? `${rating.toFixed(1)} (${count})` : "No reviews"}
+      </span>
+    </span>
+  );
 }
 
 function HomeProductCard({
@@ -35,11 +86,24 @@ function HomeProductCard({
 }) {
   const { formatPrice } = useCurrency();
   const image = product.images?.[0]?.url ?? fallbackImage;
+  const productTag = product.tags?.[0]?.tag ?? null;
+  const averageRating = useMemo(() => getDisplayRating(product), [product]);
+  const reviewCount = product.reviewCount ?? product.reviews?.length ?? 0;
 
   return (
     <Link className="home-product-card" href={`/products/${product.slug}`}>
       <span className="home-product-media">
+        {productTag ? (
+          <span
+            className={`home-product-tag-badge ${getTagBadgeTheme(
+              productTag.slug,
+            )}`}
+          >
+            {productTag.name}
+          </span>
+        ) : null}
         <img alt={product.images?.[0]?.altText ?? product.name} src={image} />
+        <RatingStars count={reviewCount} rating={averageRating} />
       </span>
       <span className="home-product-info">
         <small>{product.isFeatured ? "Featured" : "Skincare"}</small>

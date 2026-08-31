@@ -4,7 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { ProductStatus } from '../../generated/prisma/enums.cjs';
+import {
+  ProductStatus,
+  ReviewStatus,
+} from '../../generated/prisma/enums.cjs';
 import { PrismaService } from '../database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductRelationsDto } from './dto/product-relations.dto';
@@ -22,6 +25,7 @@ type ProductRelationClient = Pick<
   | 'productHairProfile'
   | 'productConcern'
   | 'productBenefit'
+  | 'productTag'
   | 'ingredient'
   | 'audience'
   | 'skinType'
@@ -29,6 +33,7 @@ type ProductRelationClient = Pick<
   | 'hairProfile'
   | 'concern'
   | 'benefit'
+  | 'tag'
 >;
 
 type ProductImageRecord = {
@@ -47,6 +52,10 @@ type ProductImageRecord = {
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type RatingReview = {
+  rating: number;
 };
 
 @Injectable()
@@ -164,9 +173,23 @@ export class ProductService {
             benefit: true,
           },
         },
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
         ageGroups: {
           include: {
             ageGroup: true,
+          },
+        },
+        reviews: {
+          where: {
+            deletedAt: null,
+            status: ReviewStatus.APPROVED,
+          },
+          select: {
+            rating: true,
           },
         },
         attributeValues: {
@@ -189,7 +212,13 @@ export class ProductService {
       ],
     });
 
-    const sortedProducts = this.sortPublicProducts(products, query.sort);
+    const productsWithRatings = products.map((product) =>
+      this.withReviewSummary(product),
+    );
+    const sortedProducts = this.sortPublicProducts(
+      productsWithRatings,
+      query.sort,
+    );
     const totalItems = sortedProducts.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const safePage = Math.min(page, totalPages);
@@ -246,6 +275,7 @@ export class ProductService {
         ...variant,
         images: variantImagesByVariantId.get(variant.id) ?? [],
       })),
+      ...this.getReviewSummary(product.reviews),
     };
   }
 
@@ -616,6 +646,11 @@ export class ProductService {
             },
           ],
         },
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -869,6 +904,11 @@ export class ProductService {
           benefit: true,
         },
       },
+      tags: {
+        include: {
+          tag: true,
+        },
+      },
     };
   }
 
@@ -954,6 +994,53 @@ export class ProductService {
           benefit: true,
         },
       },
+      tags: {
+        include: {
+          tag: true,
+        },
+      },
+      reviews: {
+        where: {
+          deletedAt: null,
+          status: ReviewStatus.APPROVED,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc' as const,
+        },
+      },
+    };
+  }
+
+  private withReviewSummary<T extends { reviews?: RatingReview[] }>(
+    product: T,
+  ) {
+    return {
+      ...product,
+      ...this.getReviewSummary(product.reviews ?? []),
+    };
+  }
+
+  private getReviewSummary(reviews: RatingReview[]) {
+    const reviewCount = reviews.length;
+    const ratingTotal = reviews.reduce(
+      (total, review) => total + review.rating,
+      0,
+    );
+
+    return {
+      averageRating: reviewCount
+        ? Number((ratingTotal / reviewCount).toFixed(1))
+        : 0,
+      reviewCount,
     };
   }
 
@@ -1208,6 +1295,26 @@ export class ProductService {
         });
       }
     }
+
+    if (dto.tagIds !== undefined) {
+      const tagIds = this.dedupeIds(dto.tagIds);
+
+      await this.ensureActiveTagIds(tx, tagIds);
+      await tx.productTag.deleteMany({
+        where: {
+          productId,
+        },
+      });
+
+      if (tagIds.length > 0) {
+        await tx.productTag.createMany({
+          data: tagIds.map((tagId) => ({
+            productId,
+            tagId,
+          })),
+        });
+      }
+    }
   }
 
   private dedupeIds(ids: string[]): string[] {
@@ -1391,6 +1498,29 @@ export class ProductService {
 
     if (count !== ids.length) {
       throw new NotFoundException('One or more benefits were not found');
+    }
+  }
+
+  private async ensureActiveTagIds(
+    tx: ProductRelationClient,
+    ids: string[],
+  ): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const count = await tx.tag.count({
+      where: {
+        id: {
+          in: ids,
+        },
+        deletedAt: null,
+        isActive: true,
+      },
+    });
+
+    if (count !== ids.length) {
+      throw new NotFoundException('One or more tags were not found');
     }
   }
 

@@ -24,7 +24,8 @@ export type ProductMetadataResource =
   | 'age-groups'
   | 'hair-profiles'
   | 'concerns'
-  | 'benefits';
+  | 'benefits'
+  | 'tags';
 
 type ProductMetadataEntity =
   | 'ingredient'
@@ -33,7 +34,8 @@ type ProductMetadataEntity =
   | 'age group'
   | 'hair profile'
   | 'concern'
-  | 'benefit';
+  | 'benefit'
+  | 'tag';
 
 @Injectable()
 export class ProductMetadataService {
@@ -78,6 +80,10 @@ export class ProductMetadataService {
         where: activeWhere,
         orderBy,
       }),
+      this.prisma.tag.findMany({
+        where: activeWhere,
+        orderBy,
+      }),
       this.prisma.category.findMany({
         where: activeWhere,
         orderBy,
@@ -91,6 +97,7 @@ export class ProductMetadataService {
         hairProfiles,
         concerns,
         benefits,
+        tags,
         categories,
       ]) => ({
         ingredients,
@@ -100,6 +107,7 @@ export class ProductMetadataService {
         hairProfiles,
         concerns,
         benefits,
+        tags,
         categories,
       }),
     );
@@ -281,6 +289,8 @@ export class ProductMetadataService {
         return this.createConcern(dto);
       case 'benefits':
         return this.createBenefit(dto);
+      case 'tags':
+        return this.createTag(dto);
       default:
         throw new BadRequestException('Unsupported metadata resource');
     }
@@ -298,6 +308,8 @@ export class ProductMetadataService {
         return this.findAllConcerns();
       case 'benefits':
         return this.findAllBenefits();
+      case 'tags':
+        return this.findAllTags();
       default:
         throw new BadRequestException('Unsupported metadata resource');
     }
@@ -315,6 +327,8 @@ export class ProductMetadataService {
         return this.findConcern(id);
       case 'benefits':
         return this.findBenefit(id);
+      case 'tags':
+        return this.findTag(id);
       default:
         throw new BadRequestException('Unsupported metadata resource');
     }
@@ -336,6 +350,8 @@ export class ProductMetadataService {
         return this.updateConcern(id, dto);
       case 'benefits':
         return this.updateBenefit(id, dto);
+      case 'tags':
+        return this.updateTag(id, dto);
       default:
         throw new BadRequestException('Unsupported metadata resource');
     }
@@ -353,6 +369,8 @@ export class ProductMetadataService {
         return this.softDeleteConcern(id);
       case 'benefits':
         return this.softDeleteBenefit(id);
+      case 'tags':
+        return this.softDeleteTag(id);
       default:
         throw new BadRequestException('Unsupported metadata resource');
     }
@@ -678,6 +696,70 @@ export class ProductMetadataService {
     });
   }
 
+  private createTag(dto: CreateProductMetadataDto) {
+    return this.prisma.tag
+      .create({
+        data: this.getTagCreateData(dto),
+      })
+      .catch((error: unknown) => {
+        this.handleUniqueSlugError(error, 'tag');
+        throw error;
+      });
+  }
+
+  private findAllTags() {
+    return this.prisma.tag.findMany({
+      where: {
+        deletedAt: null,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+  }
+
+  private async findTag(id: string) {
+    const tag = await this.prisma.tag.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+      },
+    });
+
+    if (!tag) {
+      throw new NotFoundException('Tag not found');
+    }
+
+    return tag;
+  }
+
+  private async updateTag(id: string, dto: UpdateProductMetadataDto) {
+    await this.findTag(id);
+
+    return this.prisma.tag
+      .update({
+        where: {
+          id,
+        },
+        data: this.getTagUpdateData(dto),
+      })
+      .catch((error: unknown) => {
+        this.handleUniqueSlugError(error, 'tag');
+        throw error;
+      });
+  }
+
+  private async softDeleteTag(id: string) {
+    await this.findTag(id);
+
+    return this.prisma.tag.update({
+      where: {
+        id,
+      },
+      data: this.getSoftDeleteData(),
+    });
+  }
+
   private getCreateData(dto: CreateProductMetadataDto) {
     return {
       name: dto.name.trim(),
@@ -697,6 +779,28 @@ export class ProductMetadataService {
       }),
       ...(dto.description !== undefined && {
         description: this.nullableTrim(dto.description),
+      }),
+      ...(dto.isActive !== undefined && {
+        isActive: dto.isActive,
+      }),
+    };
+  }
+
+  private getTagCreateData(dto: CreateProductMetadataDto) {
+    return {
+      name: dto.name.trim(),
+      slug: this.normalizeSlug(dto.slug),
+      isActive: dto.isActive ?? true,
+    };
+  }
+
+  private getTagUpdateData(dto: UpdateProductMetadataDto) {
+    return {
+      ...(dto.name !== undefined && {
+        name: dto.name.trim(),
+      }),
+      ...(dto.slug !== undefined && {
+        slug: this.normalizeSlug(dto.slug),
       }),
       ...(dto.isActive !== undefined && {
         isActive: dto.isActive,

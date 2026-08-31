@@ -76,6 +76,10 @@ const metadataLinks = [
     href: "/admin/product-metadata/benefits/add",
     label: "Add Benefit",
   },
+  {
+    href: "/admin/product-metadata/tags/add",
+    label: "Add Tag",
+  },
 ];
 
 const orderLinks = [

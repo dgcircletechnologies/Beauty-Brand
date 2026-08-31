@@ -53,6 +53,22 @@ function getPrimaryPrice(product: customerApi.CustomerProduct) {
   return product.variants?.[0]?.price ?? "0";
 }
 
+function getDisplayRating(product: customerApi.CustomerProduct) {
+  if (typeof product.averageRating === "number") {
+    return product.averageRating;
+  }
+
+  const reviews = product.reviews ?? [];
+
+  if (!reviews.length) {
+    return 0;
+  }
+
+  const total = reviews.reduce((sum, review) => sum + review.rating, 0);
+
+  return Number((total / reviews.length).toFixed(1));
+}
+
 function ChevronIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -63,9 +79,13 @@ function ChevronIcon() {
 
 function ProductImageSlider({
   images,
+  rating,
+  reviewCount,
   productName,
 }: {
   images: customerApi.CustomerProductImage[];
+  rating: number;
+  reviewCount: number;
   productName: string;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -90,7 +110,11 @@ function ProductImageSlider({
   }, [images.length, isHovering]);
 
   if (!images.length) {
-    return <div className="shop-product-image-placeholder" />;
+    return (
+      <div className="shop-product-image-placeholder">
+        <RatingStars count={reviewCount} rating={rating} />
+      </div>
+    );
   }
 
   function showPrevious() {
@@ -168,7 +192,58 @@ function ProductImageSlider({
           />
         ))}
       </div>
+      <RatingStars count={reviewCount} rating={rating} />
     </div>
+  );
+}
+
+function RatingStars({ rating, count }: { rating: number; count: number }) {
+  const roundedRating = Math.round(rating);
+
+  return (
+    <span className="product-rating-row" aria-label={`${rating} out of 5 stars`}>
+      <span className="rating-stars" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, index) => (
+          <span className={index < roundedRating ? "filled" : undefined} key={index}>
+            ★
+          </span>
+        ))}
+      </span>
+      <span className="rating-count">
+        {count ? `${rating.toFixed(1)} (${count})` : "No reviews"}
+      </span>
+    </span>
+  );
+}
+
+function ShopProductCard({
+  formatPrice,
+  product,
+}: {
+  formatPrice: (amount: string | number) => string;
+  product: customerApi.CustomerProduct;
+}) {
+  const averageRating = useMemo(() => getDisplayRating(product), [product]);
+  const reviewCount = product.reviewCount ?? product.reviews?.length ?? 0;
+
+  return (
+    <article className="shop-product-card">
+      <Link href={`/products/${product.slug}`}>
+        <ProductImageSlider
+          images={product.images ?? []}
+          productName={product.name}
+          rating={averageRating}
+          reviewCount={reviewCount}
+        />
+      </Link>
+      <div>
+        <p>{product.categories?.[0]?.category.name ?? "Skincare"}</p>
+        <h2>
+          <Link href={`/products/${product.slug}`}>{product.name}</Link>
+        </h2>
+        <span>{formatPrice(getPrimaryPrice(product))}</span>
+      </div>
+    </article>
   );
 }
 
@@ -525,26 +600,11 @@ export function CustomerShop() {
             <>
               <div className="shop-product-grid">
                 {products.map((product) => (
-                  <article className="shop-product-card" key={product.id}>
-                    <Link href={`/products/${product.slug}`}>
-                      <ProductImageSlider
-                        images={product.images ?? []}
-                        productName={product.name}
-                      />
-                    </Link>
-                    <div>
-                      <p>
-                        {product.categories?.[0]?.category.name ??
-                          "Skincare"}
-                      </p>
-                      <h2>
-                        <Link href={`/products/${product.slug}`}>
-                          {product.name}
-                        </Link>
-                      </h2>
-                      <span>{formatPrice(getPrimaryPrice(product))}</span>
-                    </div>
-                  </article>
+                  <ShopProductCard
+                    formatPrice={formatPrice}
+                    key={product.id}
+                    product={product}
+                  />
                 ))}
               </div>
 
