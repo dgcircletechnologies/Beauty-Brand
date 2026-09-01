@@ -121,13 +121,21 @@ export default function AdminAttributesPage() {
   }, [attributes, selectedAttributeId]);
 
   useEffect(() => {
+    let isMounted = true;
+
     if (!accessToken || !selectedAttribute || !isOptionAttribute(selectedAttribute)) {
-      setOptions([]);
-      setOptionPagination(null);
-      return;
+      queueMicrotask(() => {
+        if (isMounted) {
+          setOptions([]);
+          setOptionPagination(null);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+      };
     }
 
-    let isMounted = true;
     const token = accessToken;
     const attributeId = selectedAttribute.id;
 

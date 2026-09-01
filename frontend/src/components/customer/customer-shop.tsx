@@ -22,7 +22,10 @@ const filterSections = [
   { id: "benefit", title: "Benefit", source: "benefits" },
   { id: "ageGroup", title: "Age Group", source: "ageGroups" },
   { id: "formula", title: "Formula", source: "formula" },
+  { id: "tag", title: "Tags", source: "tags" },
 ] as const;
+
+const tagBadgeThemes = ["coral", "sage", "ink", "rose", "gold"] as const;
 
 const sortOptions = [
   { value: "featured", label: "Featured" },
@@ -39,6 +42,7 @@ const emptyFilters: customerApi.CustomerShopFilters = {
   benefits: [],
   ageGroups: [],
   formula: [],
+  tags: [],
   priceRanges: [],
 };
 
@@ -69,6 +73,14 @@ function getDisplayRating(product: customerApi.CustomerProduct) {
   return Number((total / reviews.length).toFixed(1));
 }
 
+function getTagBadgeTheme(slug: string) {
+  const hash = slug
+    .split("")
+    .reduce((total, character) => total + character.charCodeAt(0), 0);
+
+  return tagBadgeThemes[hash % tagBadgeThemes.length];
+}
+
 function ChevronIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -81,41 +93,68 @@ function ProductImageSlider({
   images,
   rating,
   reviewCount,
+  tags,
   productName,
 }: {
   images: customerApi.CustomerProductImage[];
   rating: number;
   reviewCount: number;
+  tags: customerApi.CustomerMetadataItem[];
   productName: string;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [activeTagIndex, setActiveTagIndex] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
   const touchStartXRef = useRef<number | null>(null);
   const didSwipeRef = useRef(false);
 
   useEffect(() => {
-    setActiveIndex(0);
-  }, [images.length]);
-
-  useEffect(() => {
-    if (!isHovering || images.length <= 1) {
+    if (!isHovering || (images.length <= 1 && tags.length <= 1)) {
       return;
     }
 
     const intervalId = window.setInterval(() => {
-      setActiveIndex((current) => (current + 1) % images.length);
+      if (images.length > 1) {
+        setActiveIndex((current) => (current + 1) % images.length);
+      }
+
+      if (tags.length > 1) {
+        setActiveTagIndex((current) => (current + 1) % tags.length);
+      }
     }, 1800);
 
     return () => window.clearInterval(intervalId);
-  }, [images.length, isHovering]);
+  }, [images.length, isHovering, tags.length]);
+
+  const currentTag = tags[Math.min(activeTagIndex, tags.length - 1)] ?? null;
+
+  function stopHovering() {
+    setIsHovering(false);
+    setActiveTagIndex(0);
+  }
 
   if (!images.length) {
     return (
-      <div className="shop-product-image-placeholder">
+      <div
+        className="shop-product-image-placeholder"
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={stopHovering}
+      >
+        {currentTag ? (
+          <span
+            className={`shop-product-tag-badge ${getTagBadgeTheme(
+              currentTag.slug,
+            )}`}
+          >
+            {currentTag.name}
+          </span>
+        ) : null}
         <RatingStars count={reviewCount} rating={rating} />
       </div>
     );
   }
+
+  const currentIndex = Math.min(activeIndex, images.length - 1);
 
   function showPrevious() {
     setActiveIndex((current) =>
@@ -176,13 +215,22 @@ function ProductImageSlider({
       className="shop-product-image"
       onClickCapture={handleClickCapture}
       onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseLeave={stopHovering}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      {currentTag ? (
+        <span
+          className={`shop-product-tag-badge ${getTagBadgeTheme(
+            currentTag.slug,
+          )}`}
+        >
+          {currentTag.name}
+        </span>
+      ) : null}
       <div
         className="shop-product-image-track"
-        style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+        style={{ transform: `translateX(-${currentIndex * 100}%)` }}
       >
         {images.map((image) => (
           <img
@@ -225,6 +273,7 @@ function ShopProductCard({
 }) {
   const averageRating = useMemo(() => getDisplayRating(product), [product]);
   const reviewCount = product.reviewCount ?? product.reviews?.length ?? 0;
+  const productTags = product.tags?.map((tagLink) => tagLink.tag) ?? [];
 
   return (
     <article className="shop-product-card">
@@ -234,14 +283,17 @@ function ShopProductCard({
           productName={product.name}
           rating={averageRating}
           reviewCount={reviewCount}
+          tags={productTags}
         />
       </Link>
       <div>
-        <p>{product.categories?.[0]?.category.name ?? "Skincare"}</p>
+        <div className="shop-product-meta-row">
+          <p>{product.categories?.[0]?.category.name ?? "Skincare"}</p>
+          <span>{formatPrice(getPrimaryPrice(product))}</span>
+        </div>
         <h2>
           <Link href={`/products/${product.slug}`}>{product.name}</Link>
         </h2>
-        <span>{formatPrice(getPrimaryPrice(product))}</span>
       </div>
     </article>
   );
@@ -270,6 +322,7 @@ export function CustomerShop() {
       benefit: readList(searchParams, "benefit"),
       ageGroup: readList(searchParams, "ageGroup"),
       formula: readList(searchParams, "formula"),
+      tag: readList(searchParams, "tag"),
       minPrice: searchParams.get("minPrice") ?? "",
       maxPrice: searchParams.get("maxPrice") ?? "",
       sort: searchParams.get("sort") ?? "featured",
@@ -289,6 +342,7 @@ export function CustomerShop() {
         selected.benefit.join(","),
         selected.ageGroup.join(","),
         selected.formula.join(","),
+        selected.tag.join(","),
         selected.minPrice,
         selected.maxPrice,
         selected.sort,
@@ -382,6 +436,7 @@ export function CustomerShop() {
     selected.benefit.length +
     selected.ageGroup.length +
     selected.formula.length +
+    selected.tag.length +
     Number(Boolean(selected.minPrice || selected.maxPrice));
 
   function clearFilters() {
@@ -392,6 +447,7 @@ export function CustomerShop() {
       benefit: null,
       ageGroup: null,
       formula: null,
+      tag: null,
       minPrice: null,
       maxPrice: null,
       page: null,

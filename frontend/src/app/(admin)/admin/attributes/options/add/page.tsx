@@ -96,13 +96,21 @@ export default function AddAttributeOptionPage() {
   }, [accessToken]);
 
   useEffect(() => {
+    let isMounted = true;
+
     if (!accessToken || !attributeId) {
-      setOptions([]);
-      setPagination(null);
-      return;
+      queueMicrotask(() => {
+        if (isMounted) {
+          setOptions([]);
+          setPagination(null);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+      };
     }
 
-    let isMounted = true;
     const token = accessToken;
     const selectedAttributeId = attributeId;
 
@@ -149,6 +157,8 @@ export default function AddAttributeOptionPage() {
   }, [accessToken, attributeId, debouncedSearchTerm, page, statusFilter]);
 
   useEffect(() => {
+    let isMounted = true;
+
     if (
       editingOptionId ||
       !accessToken ||
@@ -156,12 +166,18 @@ export default function AddAttributeOptionPage() {
       !debouncedValue ||
       !valuePattern.test(debouncedValue)
     ) {
-      setValueStatus(null);
-      setIsCheckingValue(false);
-      return;
+      queueMicrotask(() => {
+        if (isMounted) {
+          setValueStatus(null);
+          setIsCheckingValue(false);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+      };
     }
 
-    let isMounted = true;
     const token = accessToken;
     const selectedAttributeId = attributeId;
     const valueSnapshot = debouncedValue;

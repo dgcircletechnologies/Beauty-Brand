@@ -24,14 +24,22 @@ export default function ProfileSessionsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+
     if (!accessToken || !refreshToken) {
       if (!isBootstrapping) {
-        setIsLoading(false);
+        queueMicrotask(() => {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        });
       }
-      return;
+
+      return () => {
+        isMounted = false;
+      };
     }
 
-    let isMounted = true;
     const tokenSnapshot = accessToken;
     const refreshTokenSnapshot = refreshToken;
 

@@ -156,6 +156,7 @@ export type CustomerShopFilters = {
   benefits: CustomerShopFilterOption[];
   ageGroups: CustomerShopFilterOption[];
   formula: CustomerShopFilterOption[];
+  tags: CustomerShopFilterOption[];
   priceRanges: CustomerShopPriceRange[];
 };
 
@@ -182,6 +183,7 @@ export type CustomerShopProductParams = {
   benefit?: string[];
   ageGroup?: string[];
   formula?: string[];
+  tag?: string[];
   minPrice?: string;
   maxPrice?: string;
   sort?: string;
@@ -483,15 +485,15 @@ export type AccountSessions = {
 export type UpsertAddressPayload = {
   label?: string;
   firstName: string;
-  lastName: string;
+  lastName?: string;
   company?: string;
   line1: string;
   line2?: string;
   city: string;
-  stateOrProvince?: string;
+  stateOrProvince: string;
   postalCode: string;
   countryCode: string;
-  phone?: string;
+  phone: string;
   isDefaultShipping?: boolean;
   isDefaultBilling?: boolean;
 };
@@ -525,6 +527,7 @@ export function getCustomerShopProducts(options: CustomerShopProductParams = {})
   appendListParam(params, "benefit", options.benefit);
   appendListParam(params, "ageGroup", options.ageGroup);
   appendListParam(params, "formula", options.formula);
+  appendListParam(params, "tag", options.tag);
 
   if (options.minPrice) {
     params.set("minPrice", options.minPrice);

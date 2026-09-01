@@ -265,15 +265,15 @@ export class AccountService {
     return {
       label: this.nullableTrim(dto.label),
       firstName: dto.firstName.trim(),
-      lastName: dto.lastName.trim(),
+      lastName: dto.lastName?.trim() ?? '',
       company: this.nullableTrim(dto.company),
       line1: dto.line1.trim(),
       line2: this.nullableTrim(dto.line2),
       city: dto.city.trim(),
-      stateOrProvince: this.nullableTrim(dto.stateOrProvince),
+      stateOrProvince: dto.stateOrProvince.trim(),
       postalCode: dto.postalCode.trim(),
       countryCode: dto.countryCode.trim().toUpperCase(),
-      phone: this.nullableTrim(dto.phone),
+      phone: dto.phone.trim(),
       isDefaultShipping: dto.isDefaultShipping ?? false,
       isDefaultBilling: dto.isDefaultBilling ?? false,
     };

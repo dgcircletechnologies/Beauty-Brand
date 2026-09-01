@@ -41,6 +41,42 @@ function toPayload(formData: FormData): customerApi.UpsertAddressPayload {
   };
 }
 
+function RequiredLabel({ children }: { children: string }) {
+  return (
+    <span className="required-label">
+      {children}
+      <span aria-hidden="true" className="required-marker">
+        *
+      </span>
+    </span>
+  );
+}
+
+function mergeSavedAddress(
+  currentAddresses: customerApi.CustomerAddress[],
+  savedAddress: customerApi.CustomerAddress,
+) {
+  const nextAddresses = currentAddresses.map((address) => ({
+    ...address,
+    ...(savedAddress.isDefaultShipping && {
+      isDefaultShipping: address.id === savedAddress.id,
+    }),
+    ...(savedAddress.isDefaultBilling && {
+      isDefaultBilling: address.id === savedAddress.id,
+    }),
+  }));
+  const existingIndex = nextAddresses.findIndex(
+    (address) => address.id === savedAddress.id,
+  );
+
+  if (existingIndex === -1) {
+    return [savedAddress, ...nextAddresses];
+  }
+
+  nextAddresses[existingIndex] = savedAddress;
+  return nextAddresses;
+}
+
 export default function AddressesPage() {
   const { accessToken } = useAuth();
   const [addresses, setAddresses] = useState<customerApi.CustomerAddress[]>([]);
@@ -121,6 +157,7 @@ export default function AddressesPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
 
     if (!accessToken) {
       return;
@@ -133,18 +170,26 @@ export default function AddressesPage() {
     try {
       const payload = toPayload(new FormData(event.currentTarget));
 
+      let savedAddress: customerApi.CustomerAddress;
+
       if (editingAddress) {
-        await customerApi.updateAddress(accessToken, editingAddress.id, payload);
+        savedAddress = await customerApi.updateAddress(
+          accessToken,
+          editingAddress.id,
+          payload,
+        );
         setSuccess("Address updated successfully.");
       } else {
-        await customerApi.createAddress(accessToken, payload);
+        savedAddress = await customerApi.createAddress(accessToken, payload);
         setSuccess("Address added successfully.");
       }
 
+      setAddresses((currentAddresses) =>
+        mergeSavedAddress(currentAddresses, savedAddress),
+      );
+      form.reset();
       setEditingAddress(null);
       setIsAddressFormOpen(false);
-      event.currentTarget.reset();
-      await loadAddresses();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -243,7 +288,9 @@ export default function AddressesPage() {
                     <div>
                       <h2>{address.label || "Address"}</h2>
                       <p>
-                        {address.firstName} {address.lastName}
+                        {[address.firstName, address.lastName]
+                          .filter(Boolean)
+                          .join(" ")}
                       </p>
                       {address.company ? <p>{address.company}</p> : null}
                       <p>{address.line1}</p>
@@ -319,7 +366,7 @@ export default function AddressesPage() {
               </div>
               <div className="split-fields">
                 <label>
-                  First name
+                  <RequiredLabel>First name</RequiredLabel>
                   <input
                     name="firstName"
                     defaultValue={formAddress.firstName}
@@ -331,7 +378,6 @@ export default function AddressesPage() {
                   <input
                     name="lastName"
                     defaultValue={formAddress.lastName}
-                    required
                   />
                 </label>
               </div>
@@ -347,7 +393,7 @@ export default function AddressesPage() {
                   <input name="company" defaultValue={formAddress.company ?? ""} />
                 </label>
                 <label>
-                  Address line 1
+                  <RequiredLabel>Address line 1</RequiredLabel>
                   <input name="line1" defaultValue={formAddress.line1} required />
                 </label>
                 <label>
@@ -363,18 +409,19 @@ export default function AddressesPage() {
               </div>
               <div className="address-field-grid two-column">
                 <label>
-                  City
+                  <RequiredLabel>City</RequiredLabel>
                   <input name="city" defaultValue={formAddress.city} required />
                 </label>
                 <label>
-                  State
+                  <RequiredLabel>State</RequiredLabel>
                   <input
                     name="stateOrProvince"
                     defaultValue={formAddress.stateOrProvince ?? ""}
+                    required
                   />
                 </label>
                 <label>
-                  Postal code
+                  <RequiredLabel>Postal code</RequiredLabel>
                   <input
                     name="postalCode"
                     defaultValue={formAddress.postalCode}
@@ -382,7 +429,7 @@ export default function AddressesPage() {
                   />
                 </label>
                 <label>
-                  Country code
+                  <RequiredLabel>Country code</RequiredLabel>
                   <select
                     name="countryCode"
                     defaultValue={formAddress.countryCode}
@@ -401,11 +448,15 @@ export default function AddressesPage() {
             <section className="account-setting-row">
               <div>
                 <h2>Phone</h2>
-                <p>Optional phone number for courier updates.</p>
+                <p>Phone number for courier updates.</p>
               </div>
               <label>
-                Phone
-                <input name="phone" defaultValue={formAddress.phone ?? ""} />
+                <RequiredLabel>Phone</RequiredLabel>
+                <input
+                  name="phone"
+                  defaultValue={formAddress.phone ?? ""}
+                  required
+                />
               </label>
             </section>
             <section className="account-setting-row">

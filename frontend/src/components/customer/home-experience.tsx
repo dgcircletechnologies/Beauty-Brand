@@ -93,24 +93,67 @@ function HomeProductCard({
   product: customerApi.CustomerProduct;
 }) {
   const { formatPrice } = useCurrency();
-  const image = product.images?.[0]?.url ?? fallbackImage;
-  const productTag = product.tags?.[0]?.tag ?? null;
+  const images = product.images?.length
+    ? product.images
+    : [
+        {
+          altText: product.name,
+          url: fallbackImage,
+        } as customerApi.CustomerProductImage,
+      ];
+  const productTags = product.tags?.map((tagLink) => tagLink.tag) ?? [];
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [activeTagIndex, setActiveTagIndex] = useState(0);
+  const [isHovering, setIsHovering] = useState(false);
   const averageRating = useMemo(() => getDisplayRating(product), [product]);
   const reviewCount = product.reviewCount ?? product.reviews?.length ?? 0;
+  const activeImage =
+    images[Math.min(activeImageIndex, images.length - 1)] ?? images[0];
+  const activeTag =
+    productTags[Math.min(activeTagIndex, productTags.length - 1)] ?? null;
+
+  useEffect(() => {
+    if (!isHovering || (images.length <= 1 && productTags.length <= 1)) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (images.length > 1) {
+        setActiveImageIndex((current) => (current + 1) % images.length);
+      }
+
+      if (productTags.length > 1) {
+        setActiveTagIndex((current) => (current + 1) % productTags.length);
+      }
+    }, 1800);
+
+    return () => window.clearInterval(intervalId);
+  }, [images.length, isHovering, productTags.length]);
+
+  function stopHovering() {
+    setIsHovering(false);
+    setActiveImageIndex(0);
+    setActiveTagIndex(0);
+  }
 
   return (
-    <Link className="home-product-card" href={`/products/${product.slug}`}>
+    <Link
+      className="home-product-card"
+      href={`/products/${product.slug}`}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={stopHovering}
+    >
       <span className="home-product-media">
-        {productTag ? (
+        {activeTag ? (
           <span
             className={`home-product-tag-badge ${getTagBadgeTheme(
-              productTag.slug,
+              activeTag.slug,
             )}`}
           >
-            {productTag.name}
+            {activeTag.name}
           </span>
         ) : null}
-        <img alt={product.images?.[0]?.altText ?? product.name} src={image} />
+        <img alt={activeImage.altText ?? product.name} src={activeImage.url} />
         <RatingStars count={reviewCount} rating={averageRating} />
       </span>
       <span className="home-product-info">
@@ -128,9 +171,7 @@ function HomeFeatureSection() {
       <div className="home-feature-main">
         <div className="home-feature-heading">
           <p className="eyebrow">Clean care</p>
-          <h2>
-            Clean, Beyond Reproach <span data-slot="italic">Skincare.</span>
-          </h2>
+          <h2>Clean, Beyond Reproach Skincare.</h2>
         </div>
         <div className="home-feature-bottom">
           <div className="home-feature-small">

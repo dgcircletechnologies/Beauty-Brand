@@ -119,18 +119,26 @@ export default function AttributeDefinitionPage() {
   }, [accessToken, debouncedSearchTerm, page, statusFilter, typeFilter]);
 
   useEffect(() => {
+    let isMounted = true;
+
     if (
       editingAttributeId ||
       !accessToken ||
       !debouncedSlug ||
       !slugPattern.test(debouncedSlug)
     ) {
-      setSlugStatus(null);
-      setIsCheckingSlug(false);
-      return;
+      queueMicrotask(() => {
+        if (isMounted) {
+          setSlugStatus(null);
+          setIsCheckingSlug(false);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+      };
     }
 
-    let isMounted = true;
     const token = accessToken;
     const slugSnapshot = debouncedSlug;
 

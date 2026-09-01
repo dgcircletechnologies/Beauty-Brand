@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Length,
@@ -16,9 +17,10 @@ export class UpsertAddressDto {
   @MaxLength(80)
   firstName!: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(80)
-  lastName!: string;
+  lastName?: string;
 
   @IsOptional()
   @IsString()
@@ -38,10 +40,10 @@ export class UpsertAddressDto {
   @MaxLength(90)
   city!: string;
 
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(90)
-  stateOrProvince?: string;
+  stateOrProvince!: string;
 
   @IsString()
   @MaxLength(30)
@@ -51,10 +53,10 @@ export class UpsertAddressDto {
   @Length(2, 2)
   countryCode!: string;
 
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(30)
-  phone?: string;
+  phone!: string;
 
   @IsOptional()
   @IsBoolean()

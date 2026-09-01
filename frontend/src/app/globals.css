@@ -725,7 +725,12 @@ p {
   border-radius: 999px;
   padding: 6px 28px 6px 12px;
   color: #18181b;
-  background: #ffffff;
+  appearance: none;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 4.5 6 7.5l3-3' fill='none' stroke='%2318181b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 14px center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
   box-shadow: 0 8px 20px rgba(9, 9, 11, 0.05);
   font-size: 12px;
   font-weight: 800;
@@ -1279,18 +1284,13 @@ p {
 }
 
 .home-feature-heading h2 {
-  max-width: 540px;
+  max-width: 780px;
   color: #09090b;
-  font-family: var(--font-playfair-display), Georgia, serif;
-  font-size: clamp(48px, 5.8vw, 80px);
-  font-style: italic;
-  font-weight: 400;
+  font-size: clamp(40px, 5vw, 82px);
+  font-style: normal;
+  font-weight: 700;
   letter-spacing: 0;
-  line-height: 1;
-}
-
-.home-feature-heading h2 [data-slot="italic"] {
-  font: inherit;
+  line-height: 0.98;
 }
 
 .home-feature-copy {
@@ -1400,11 +1400,12 @@ p {
   transition: transform 180ms ease;
 }
 
-.home-product-tag-badge {
+.home-product-tag-badge,
+.shop-product-tag-badge {
   position: absolute;
   top: 12px;
   left: 12px;
-  z-index: 1;
+  z-index: 2;
   max-width: calc(100% - 24px);
   border-radius: 999px;
   padding: 7px 11px;
@@ -1416,23 +1417,28 @@ p {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
 }
 
-.home-product-tag-badge.coral {
+.home-product-tag-badge.coral,
+.shop-product-tag-badge.coral {
   background: #dc5f47;
 }
 
-.home-product-tag-badge.sage {
+.home-product-tag-badge.sage,
+.shop-product-tag-badge.sage {
   background: #4f8061;
 }
 
-.home-product-tag-badge.ink {
+.home-product-tag-badge.ink,
+.shop-product-tag-badge.ink {
   background: #242b40;
 }
 
-.home-product-tag-badge.rose {
+.home-product-tag-badge.rose,
+.shop-product-tag-badge.rose {
   background: #b55272;
 }
 
-.home-product-tag-badge.gold {
+.home-product-tag-badge.gold,
+.shop-product-tag-badge.gold {
   background: #9a6b16;
 }
 
@@ -1871,6 +1877,13 @@ p {
   gap: 5px;
 }
 
+.shop-product-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .shop-product-card p {
   color: #71717a;
   font-size: 12px;
@@ -1895,6 +1908,12 @@ p {
   color: #18181b;
   font-size: 14px;
   font-weight: 700;
+}
+
+.shop-product-tag-badge {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .product-rating-row {
@@ -2338,6 +2357,70 @@ p {
   font-size: 16px;
   font-weight: 700;
   text-decoration: line-through;
+}
+
+.product-information {
+  display: grid;
+  gap: 22px;
+}
+
+.product-information-intro {
+  display: grid;
+  gap: 12px;
+}
+
+.product-information-intro h3,
+.product-information-group h3 {
+  color: #18181b;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.product-information-intro p {
+  max-width: 62ch;
+  margin: 0;
+  color: #52525b;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.product-information-badges,
+.product-information-group div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.product-information-badges span,
+.product-information-group span {
+  border: 1px solid rgba(9, 9, 11, 0.1);
+  border-radius: 999px;
+  padding: 7px 11px;
+  color: #18181b;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.product-information-badges span {
+  background: #f5f0e8;
+}
+
+.product-information-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.product-information-group {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border: 1px solid rgba(9, 9, 11, 0.08);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fafafa;
 }
 
 .product-template-options {
@@ -3582,6 +3665,19 @@ p {
   color: #18181b;
   font-size: 13px;
   font-weight: 800;
+}
+
+.required-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.required-marker {
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .account-form input,
@@ -6762,6 +6858,10 @@ button.attribute-view-select {
     grid-template-columns: 1fr;
   }
 
+  .product-information-grid {
+    grid-template-columns: 1fr;
+  }
+
   .customer-order-item,
   .order-detail-product {
     gap: 16px;
@@ -7187,6 +7287,7 @@ button.attribute-view-select {
     max-width: 82px;
     min-height: 34px;
     padding-inline: 10px 24px;
+    background-position: right 12px center;
   }
 
   .mobile-currency-picker select {

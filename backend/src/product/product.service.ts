@@ -286,6 +286,7 @@ export class ProductService {
     const benefitSlugs = this.parseList(query.benefit);
     const ageGroupSlugs = this.parseList(query.ageGroup);
     const formulas = this.parseList(query.formula);
+    const tagSlugs = this.parseList(query.tag);
     const minPrice = this.parsePrice(query.minPrice);
     const maxPrice = this.parsePrice(query.maxPrice);
     const searchTerm = query.q?.trim();
@@ -407,6 +408,22 @@ export class ProductService {
       });
     }
 
+    if (tagSlugs.length) {
+      andFilters.push({
+        tags: {
+          some: {
+            tag: {
+              slug: {
+                in: tagSlugs,
+              },
+              isActive: true,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+    }
+
     if (minPrice !== null || maxPrice !== null) {
       andFilters.push({
         variants: {
@@ -499,6 +516,7 @@ export class ProductService {
       benefits,
       ageGroups,
       formulaAttributes,
+      tags,
     ] = await Promise.all([
       this.prisma.category.findMany({
         where: {
@@ -584,6 +602,19 @@ export class ProductService {
           name: 'asc',
         },
       }),
+      this.prisma.tag.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+        },
+        select: {
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      }),
     ]);
 
     return {
@@ -596,6 +627,7 @@ export class ProductService {
         name: attribute.slug === 'spf' ? 'Has SPF' : attribute.name,
         slug: attribute.slug === 'spf' ? 'spf' : attribute.slug,
       })),
+      tags,
       priceRanges: [
         { name: 'Under Rs 1,000', minPrice: null, maxPrice: 1000 },
         { name: 'Rs 1,000 - Rs 1,999', minPrice: 1000, maxPrice: 1999 },

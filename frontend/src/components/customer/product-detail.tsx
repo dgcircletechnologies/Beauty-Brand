@@ -150,6 +150,135 @@ function ChipList({
   );
 }
 
+type ProductInfoGroup = {
+  title: string;
+  items: string[];
+};
+
+function formatCustomerValue(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b40 plus\b/i, "40+")
+    .replace(/\bsensitive skin users\b/i, "Sensitive Skin")
+    .replace(/\bnot applicable\b/i, "Not Applicable")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function isUsefulDetail(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase();
+
+  return Boolean(
+    normalized &&
+      !["n/a", "na", "none", "null", "undefined", "not applicable"].includes(
+        normalized,
+      ),
+  );
+}
+
+function uniqueDetailValues(items: string[]) {
+  const seenValues = new Set<string>();
+
+  return items.filter((item) => {
+    const normalized = item.trim().toLowerCase();
+
+    if (!normalized || seenValues.has(normalized)) {
+      return false;
+    }
+
+    seenValues.add(normalized);
+    return true;
+  });
+}
+
+function metadataNames(items: customerApi.CustomerMetadataItem[]) {
+  return uniqueDetailValues(
+    items
+      .map((item) => item.name)
+      .filter(isUsefulDetail)
+      .map(formatCustomerValue),
+  );
+}
+
+function attributeDisplayValue(value: customerApi.CustomerProductAttributeValue) {
+  const displayValue = getAttributeValue(value);
+
+  if (!isUsefulDetail(displayValue)) {
+    return null;
+  }
+
+  if (value.booleanValue === true) {
+    return formatCustomerValue(value.attribute.name);
+  }
+
+  if (value.booleanValue === false) {
+    return null;
+  }
+
+  return `${formatCustomerValue(value.attribute.name)}: ${formatCustomerValue(
+    displayValue,
+  )}`;
+}
+
+function isHighlightAttribute(value: customerApi.CustomerProductAttributeValue) {
+  return /vegan|cruelty|organic|dermatologist|arrival|clean|fragrance|spf|tested/i.test(
+    value.attribute.name,
+  );
+}
+
+function isProductInfoAttribute(value: customerApi.CustomerProductAttributeValue) {
+  return /size|volume|weight|texture|finish|form|usage|origin|country|shelf|life|material|shade/i.test(
+    value.attribute.name,
+  );
+}
+
+function ProductInformation({
+  description,
+  groups,
+  quickHighlights,
+}: {
+  description: string | null | undefined;
+  groups: ProductInfoGroup[];
+  quickHighlights: string[];
+}) {
+  const visibleGroups = groups.filter((group) => group.items.length > 0);
+
+  if (!description && !quickHighlights.length && !visibleGroups.length) {
+    return null;
+  }
+
+  return (
+    <div className="product-information">
+      <div className="product-information-intro">
+        <h3>About this product</h3>
+        {description ? <p>{description}</p> : null}
+        {quickHighlights.length ? (
+          <div className="product-information-badges">
+            {quickHighlights.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {visibleGroups.length ? (
+        <div className="product-information-grid">
+          {visibleGroups.map((group) => (
+            <section className="product-information-group" key={group.title}>
+              <h3>{group.title}</h3>
+              <div>
+                {group.items.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function AttributeRows({
   items,
 }: {
@@ -291,6 +420,80 @@ export function ProductDetail({ slug }: { slug: string }) {
     return [...skinTypes, ...concerns, ...benefits].slice(0, 8);
   }, [product]);
 
+  const productInformation = useMemo(() => {
+    const attributes = [
+      ...(product?.attributeValues ?? []),
+      ...(selectedVariant?.attributeValues ?? []),
+    ];
+    const tagNames = metadataNames(product?.tags?.map((item) => item.tag) ?? []);
+    const productInfoItems = uniqueDetailValues(
+      attributes
+        .filter(isProductInfoAttribute)
+        .map(attributeDisplayValue)
+        .filter(isUsefulDetail),
+    );
+    const highlightItems = uniqueDetailValues([
+      ...tagNames,
+      ...attributes
+        .filter(isHighlightAttribute)
+        .map(attributeDisplayValue)
+        .filter(isUsefulDetail),
+    ]);
+    const quickHighlights = uniqueDetailValues([
+      ...productInfoItems.slice(0, 1),
+      ...highlightItems.slice(0, 3),
+    ]);
+
+    return {
+      groups: [
+        {
+          title: "Product Type",
+          items: metadataNames(
+            product?.categories?.map((item) => item.category) ?? [],
+          ),
+        },
+        {
+          title: "Suitable For",
+          items: uniqueDetailValues([
+            ...metadataNames(
+              product?.audiences?.map((item) => item.audience) ?? [],
+            ),
+            ...metadataNames(
+              product?.skinTypes?.map((item) => item.skinType) ?? [],
+            ),
+            ...metadataNames(
+              product?.ageGroups?.map((item) => item.ageGroup) ?? [],
+            ),
+            ...metadataNames(
+              product?.hairProfiles?.map((item) => item.hairProfile) ?? [],
+            ),
+          ]),
+        },
+        {
+          title: "Targets",
+          items: metadataNames(
+            product?.concerns?.map((item) => item.concern) ?? [],
+          ),
+        },
+        {
+          title: "Benefits",
+          items: metadataNames(
+            product?.productBenefits?.map((item) => item.benefit) ?? [],
+          ),
+        },
+        {
+          title: "Highlights",
+          items: highlightItems,
+        },
+        {
+          title: "Product Information",
+          items: productInfoItems,
+        },
+      ],
+      quickHighlights,
+    };
+  }, [product, selectedVariant]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -332,14 +535,26 @@ export function ProductDetail({ slug }: { slug: string }) {
   }, [primaryCategory?.slug, product?.id, relatedPage]);
 
   useEffect(() => {
-    if (!userReview) {
-      setReviewRating(5);
-      setReviewBody("");
-      return;
-    }
+    let isMounted = true;
 
-    setReviewRating(userReview.rating);
-    setReviewBody(userReview.body ?? "");
+    queueMicrotask(() => {
+      if (!isMounted) {
+        return;
+      }
+
+      if (!userReview) {
+        setReviewRating(5);
+        setReviewBody("");
+        return;
+      }
+
+      setReviewRating(userReview.rating);
+      setReviewBody(userReview.body ?? "");
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [userReview]);
 
   async function addSelectedVariantToCart() {
@@ -442,7 +657,8 @@ export function ProductDetail({ slug }: { slug: string }) {
   const variantAttributes = selectedVariant?.attributeValues ?? [];
   const combinedAttributes = [...productAttributes, ...variantAttributes];
   const variantAttributeDescriptions = variantAttributes.filter(
-    (value) => value.attribute.description,
+    (value) =>
+      value.attribute.description && !isProductInfoAttribute(value),
   );
   const relatedProducts = relatedResponse?.items ?? [];
   const relatedPagination = relatedResponse?.pagination;
@@ -629,19 +845,11 @@ export function ProductDetail({ slug }: { slug: string }) {
                 />
               ) : null}
               <div>
-                <div className="product-about-copy">
-                  <p>{product.description || product.shortDescription}</p>
-                  {variantAttributes.length ? (
-                    <p>
-                      {variantAttributes
-                        .map(
-                          (value) =>
-                            `${value.attribute.name}: ${getAttributeValue(value)}`,
-                        )
-                        .join(". ")}
-                    </p>
-                  ) : null}
-                </div>
+                <ProductInformation
+                  description={product.description || product.shortDescription}
+                  groups={productInformation.groups}
+                  quickHighlights={productInformation.quickHighlights}
+                />
                 {variantAttributeDescriptions.length ? (
                   <div className="detail-chip-list">
                     {variantAttributeDescriptions.map((value) => (
@@ -652,16 +860,6 @@ export function ProductDetail({ slug }: { slug: string }) {
                     ))}
                   </div>
                 ) : null}
-                <div className="detail-chip-list">
-                  {(product.categories ?? []).map((item) => (
-                    <article className="detail-chip" key={item.category.id}>
-                      <h3>{item.category.name}</h3>
-                      {item.category.description ? (
-                        <p>{item.category.description}</p>
-                      ) : null}
-                    </article>
-                  ))}
-                </div>
               </div>
             </div>
           ) : null}

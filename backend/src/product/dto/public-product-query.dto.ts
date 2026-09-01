@@ -31,6 +31,10 @@ export class PublicProductQueryDto {
 
   @IsOptional()
   @IsString()
+  tag?: string;
+
+  @IsOptional()
+  @IsString()
   minPrice?: string;
 
   @IsOptional()

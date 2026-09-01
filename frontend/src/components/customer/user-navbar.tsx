@@ -331,7 +331,7 @@ export function UserNavbar() {
               aria-expanded={isMobileOpen}
               onClick={() => setIsMobileOpen((current) => !current)}
             >
-              <MenuIcon />
+              <MenuIcon/>
             </button>
             <form
               className="nav-search-form desktop-nav-search"

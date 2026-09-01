@@ -78,7 +78,11 @@ export function AnalyticsDashboard() {
   }, [accessToken]);
 
   useEffect(() => {
-    void loadAnalytics();
+    const timeoutId = window.setTimeout(() => {
+      void loadAnalytics();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [loadAnalytics]);
 
   const range = useMemo(
@@ -749,7 +753,29 @@ function DonutSvg({
   const center = size / 2;
   const radius = 84;
   const circumference = 2 * Math.PI * radius;
-  let offset = 0;
+  const segments = data.reduce<
+    {
+      dash: number;
+      entry: { name: string; value: number; percent: number };
+      index: number;
+      offset: number;
+    }[]
+  >((items, entry, index) => {
+    const dash = (entry.percent / 100) * circumference;
+    const previousOffset =
+      items.at(-1)?.offset ?? 0;
+    const previousDash = items.at(-1)?.dash ?? 0;
+
+    return [
+      ...items,
+      {
+        dash,
+        entry,
+        index,
+        offset: previousOffset + previousDash,
+      },
+    ];
+  }, []);
 
   return (
     <svg aria-label="Distribution chart" className="donut-svg" viewBox={`0 0 ${size} ${size}`}>
@@ -761,9 +787,7 @@ function DonutSvg({
         stroke="#e2e8f0"
         strokeWidth="30"
       />
-      {data.map((entry, index) => {
-        const dash = (entry.percent / 100) * circumference;
-        const segment = (
+      {segments.map(({ dash, entry, index, offset }) => (
           <circle
             cx={center}
             cy={center}
@@ -781,10 +805,7 @@ function DonutSvg({
               {formatStatus(entry.name)}: {entry.value} records
             </title>
           </circle>
-        );
-        offset += dash;
-        return segment;
-      })}
+      ))}
       <text className="donut-total" textAnchor="middle" x={center} y={center - 4}>
         {data.reduce((total, entry) => total + entry.value, 0)}
       </text>
@@ -1232,23 +1253,27 @@ function ChartLegend({
   x: number;
   y: number;
 }) {
-  let offset = 0;
+  const legendItems = items.reduce<
+    ({ color: string; key: string; label: string } & { x: number })[]
+  >((positionedItems, item) => {
+    const previousItem = positionedItems.at(-1);
+    const itemX = previousItem
+      ? previousItem.x + previousItem.label.length * 7 + 34
+      : x;
+
+    return [...positionedItems, { ...item, x: itemX }];
+  }, []);
 
   return (
     <g className="svg-chart-legend">
-      {items.map((item) => {
-        const currentX = x + offset;
-        offset += item.label.length * 7 + 34;
-
-        return (
-          <g key={item.key} transform={`translate(${currentX} ${y})`}>
+      {legendItems.map((item) => (
+          <g key={item.key} transform={`translate(${item.x} ${y})`}>
             <circle cx="0" cy="-4" fill={item.color} r="5" />
             <text x="11" y="0">
               {item.label}
             </text>
           </g>
-        );
-      })}
+      ))}
     </g>
   );
 }
