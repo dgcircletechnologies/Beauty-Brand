@@ -7,8 +7,10 @@ import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
 
-const detailTabs = ["About", "How to Use", "Ingredients", "Attributes"] as const;
+const detailTabs = ["About", "Reviews", "Benefits", "Other Details"] as const;
 type DetailTab = (typeof detailTabs)[number];
+
+type ProductDetailIcon = "bag" | "return" | "shipping" | "quality" | "plant";
 
 function getAttributeValue(value: customerApi.CustomerProductAttributeValue) {
   if (value.option) {
@@ -30,8 +32,35 @@ function getAttributeValue(value: customerApi.CustomerProductAttributeValue) {
   return "Not specified";
 }
 
+function isVariantSizeAttribute(value: customerApi.CustomerProductAttributeValue) {
+  return /size|volume|weight|pack|package|ml|g\b|oz/i.test(
+    `${value.attribute.name} ${value.attribute.slug}`,
+  );
+}
+
 function getPrimaryPrice(product: customerApi.CustomerProduct) {
   return product.variants?.[0]?.price ?? "0";
+}
+
+function getVariantSizeLabel(variant: customerApi.CustomerProductVariant) {
+  const sizeAttribute = variant.attributeValues?.find(isVariantSizeAttribute);
+
+  if (sizeAttribute) {
+    return getAttributeValue(sizeAttribute);
+  }
+
+  return variant.sku;
+}
+
+function getVariantSubtitle(variant: customerApi.CustomerProductVariant) {
+  const attributes =
+    variant.attributeValues
+      ?.filter((value) => !isVariantSizeAttribute(value))
+      .map((value) => getAttributeValue(value))
+      .filter(isUsefulDetail)
+      .slice(0, 2) ?? [];
+
+  return attributes.length ? attributes.join(" / ") : variant.sku;
 }
 
 function getDisplayRating(product: customerApi.CustomerProduct) {
@@ -56,6 +85,53 @@ function getReviewUserName(review: customerApi.CustomerProductReview) {
   }
 
   return [review.user.firstName, review.user.lastName].filter(Boolean).join(" ");
+}
+
+function ProductDetailSvgIcon({ icon }: { icon: ProductDetailIcon }) {
+  if (icon === "bag") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M7.5 8.5V7a4.5 4.5 0 0 1 9 0v1.5" />
+        <path d="M5.5 8.5h13l1 11h-15l1-11Z" />
+      </svg>
+    );
+  }
+
+  if (icon === "return") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M8 7H5v3" />
+        <path d="M5.5 9.5A7 7 0 1 0 12 5" />
+        <path d="M14.5 11.5h-4a2 2 0 0 0 0 4h3a2 2 0 0 1 0 4H9" />
+      </svg>
+    );
+  }
+
+  if (icon === "shipping") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M3.5 7.5h11v9h-11z" />
+        <path d="M14.5 10.5h3.5l2.5 3v3h-6z" />
+        <path d="M7 19a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 7 19Z" />
+        <path d="M18 19a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 18 19Z" />
+      </svg>
+    );
+  }
+
+  if (icon === "quality") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M5 19c8 0 14-6 14-14-8 0-14 6-14 14Z" />
+      <path d="M5 19c0-4 2.5-7.5 7.5-10.5" />
+    </svg>
+  );
 }
 
 function uniqueImagesById(images: customerApi.CustomerProductImage[]) {
@@ -165,7 +241,7 @@ function formatCustomerValue(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function isUsefulDetail(value: string | null | undefined) {
+function isUsefulDetail(value: string | null | undefined): value is string {
   const normalized = value?.trim().toLowerCase();
 
   return Boolean(
@@ -655,6 +731,9 @@ export function ProductDetail({ slug }: { slug: string }) {
   const compareAtPrice = selectedVariant?.compareAtPrice;
   const productAttributes = product.attributeValues ?? [];
   const variantAttributes = selectedVariant?.attributeValues ?? [];
+  const selectedVariantDetails = variantAttributes.filter(
+    (value) => !isVariantSizeAttribute(value),
+  );
   const combinedAttributes = [...productAttributes, ...variantAttributes];
   const variantAttributeDescriptions = variantAttributes.filter(
     (value) =>
@@ -705,21 +784,40 @@ export function ProductDetail({ slug }: { slug: string }) {
         <aside className="product-template-summary">
           <p className="eyebrow">{primaryCategory?.name ?? "Skincare"}</p>
           <h1>{product.name}</h1>
-          <RatingStars count={reviewCount} rating={averageRating} />
-          <p>{product.shortDescription || "Skincare product"}</p>
-
-          <div className="product-template-price">
+          <div className="product-summary-meta">
+            {product.tags?.[0]?.tag ? (
+              <span className="product-vendor-pill">
+                {product.tags[0].tag.name}
+              </span>
+            ) : null}
             <strong>{formatPrice(selectedVariant?.price ?? "0")}</strong>
             {compareAtPrice ? <span>{formatPrice(compareAtPrice)}</span> : null}
+            <button
+              className="product-rating-summary-button"
+              type="button"
+              onClick={() => {
+                setActiveTab("Reviews");
+                window.requestAnimationFrame(() => {
+                  document
+                    .getElementById("product-details-tabs")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                });
+              }}
+            >
+              <RatingStars count={reviewCount} rating={averageRating} />
+            </button>
           </div>
+          <p>{product.shortDescription || "Skincare product"}</p>
 
           {product.variants?.length ? (
             <section className="product-template-options">
-              <h2>Variant</h2>
+              <h2>Size</h2>
               <div className="product-variant-options">
                 {product.variants.map((variant) => {
                   const variantAvailable =
                     variant.isActive && variant.stockQuantity > 0;
+                  const sizeLabel = getVariantSizeLabel(variant);
+                  const variantSubtitle = getVariantSubtitle(variant);
 
                   return (
                     <button
@@ -735,11 +833,11 @@ export function ProductDetail({ slug }: { slug: string }) {
                         setError(null);
                       }}
                     >
-                      <span>{variant.sku}</span>
+                      <span>{sizeLabel}</span>
                       <strong>{formatPrice(variant.price)}</strong>
                       <small>
                         {variantAvailable
-                          ? `${variant.stockQuantity} in stock`
+                          ? `${variantSubtitle} · ${variant.stockQuantity} in stock`
                           : "Out of stock"}
                       </small>
                     </button>
@@ -751,9 +849,9 @@ export function ProductDetail({ slug }: { slug: string }) {
 
           <ChipList items={metadataHighlights} />
 
-          {variantAttributes.length ? (
+          {selectedVariantDetails.length ? (
             <div className="product-selected-values">
-              {variantAttributes.map((value) => (
+              {selectedVariantDetails.map((value) => (
                 <div key={value.id}>
                   <span>{value.attribute.name}</span>
                   <strong>{getAttributeValue(value)}</strong>
@@ -763,33 +861,38 @@ export function ProductDetail({ slug }: { slug: string }) {
           ) : null}
 
           <div className="product-purchase-row">
-            <div className="quantity-controls product-quantity-controls">
-              <button
-                aria-label="Decrease quantity"
-                disabled={quantity <= 1}
-                type="button"
-                onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-              >
-                -
-              </button>
-              <span>{quantity}</span>
-              <button
-                aria-label="Increase quantity"
-                disabled={!isAvailable || quantity >= stockQuantity}
-                type="button"
-                onClick={() =>
-                  setQuantity((current) =>
-                    Math.min(stockQuantity || 1, current + 1),
-                  )
-                }
-              >
-                +
-              </button>
-            </div>
+            <label className="product-quantity-label">
+              <span>Qty</span>
+              <div className="quantity-controls product-quantity-controls">
+                <button
+                  aria-label="Decrease quantity"
+                  disabled={quantity <= 1}
+                  type="button"
+                  onClick={() =>
+                    setQuantity((current) => Math.max(1, current - 1))
+                  }
+                >
+                  -
+                </button>
+                <span>{quantity}</span>
+                <button
+                  aria-label="Increase quantity"
+                  disabled={!isAvailable || quantity >= stockQuantity}
+                  type="button"
+                  onClick={() =>
+                    setQuantity((current) =>
+                      Math.min(stockQuantity || 1, current + 1),
+                    )
+                  }
+                >
+                  +
+                </button>
+              </div>
+            </label>
 
             {accessToken ? (
               <button
-                className="primary-button"
+                className="primary-button product-add-to-cart-button"
                 disabled={
                   !selectedVariant ||
                   !isAvailable ||
@@ -798,26 +901,52 @@ export function ProductDetail({ slug }: { slug: string }) {
                 type="button"
                 onClick={() => void addSelectedVariantToCart()}
               >
-                {addingVariantId === selectedVariant?.id
-                  ? "Adding..."
-                  : "Add to Cart"}
+                <span>
+                  {addingVariantId === selectedVariant?.id
+                    ? "Adding..."
+                    : "Add to Cart"}
+                </span>
+                <span className="product-add-to-cart-icon" aria-hidden="true">
+                  <ProductDetailSvgIcon icon="bag" />
+                </span>
               </button>
             ) : (
-              <Link className="primary-link-button" href="/login">
-                Login to Add
+              <Link
+                className="primary-link-button product-add-to-cart-button"
+                href="/login"
+              >
+                <span>Login to Add</span>
+                <span className="product-add-to-cart-icon" aria-hidden="true">
+                  <ProductDetailSvgIcon icon="bag" />
+                </span>
               </Link>
             )}
           </div>
 
           {success ? <p className="form-success">{success}</p> : null}
           {error ? <p className="form-error">{error}</p> : null}
+
+          <div className="product-feature-strip">
+            {[
+              ["return", "30 Days Return"],
+              ["quality", "100% Quality Guarantee"],
+              ["plant", "Vegan & Cruelty Free"],
+            ].map(([icon, title]) => (
+              <article key={title}>
+                <span>
+                  <ProductDetailSvgIcon icon={icon as ProductDetailIcon} />
+                </span>
+                <p>{title}</p>
+              </article>
+            ))}
+          </div>
         </aside>
       </section>
 
-      <section className="product-about-block">
+      <section className="product-about-block" id="product-details-tabs">
         <h2>
-          <span>All about the</span>
-          <em>Product</em>
+          <em>all about the</em>
+          <span>PRODUCT</span>
         </h2>
 
         <div className="product-tab-list" role="tablist">
@@ -864,135 +993,208 @@ export function ProductDetail({ slug }: { slug: string }) {
             </div>
           ) : null}
 
-          {activeTab === "How to Use" ? (
-            <div className="product-detail-copy">
-              {product.usageInstructions ? (
-                <p>{product.usageInstructions}</p>
-              ) : (
-                <p>Usage instructions are not available for this product yet.</p>
-              )}
-              {product.warnings ? (
-                <p>
-                  <strong>Warnings:</strong> {product.warnings}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {activeTab === "Ingredients" ? (
-            product.ingredients?.length ? (
-              <div className="detail-chip-list">
-                {product.ingredients.map((item) => (
-                  <article className="detail-chip" key={item.ingredient.id}>
-                    <h3>
-                      {item.ingredient.name}
-                      {item.isKeyIngredient ? " (Key)" : ""}
-                    </h3>
-                    {item.ingredient.inciName ? (
-                      <p>INCI: {item.ingredient.inciName}</p>
-                    ) : null}
-                    {item.purpose ? <p>Purpose: {item.purpose}</p> : null}
-                    {item.concentration ? (
-                      <p>Concentration: {item.concentration}</p>
-                    ) : null}
-                    {item.ingredient.description ? (
-                      <p>{item.ingredient.description}</p>
-                    ) : null}
-                  </article>
-                ))}
+          {activeTab === "Reviews" ? (
+            <div className="product-review-layout" id="reviews">
+              <div className="product-reviews-heading">
+                <div>
+                  <p className="eyebrow">Reviews</p>
+                  <h2>{reviewCount} Reviews</h2>
+                </div>
+                <RatingStars count={reviewCount} rating={averageRating} />
               </div>
-            ) : (
-              <p>No ingredients are available for this product yet.</p>
-            )
-          ) : null}
 
-          {activeTab === "Attributes" ? (
-            combinedAttributes.length ? (
-              <AttributeRows items={combinedAttributes} />
-            ) : (
-              <p>No product attributes are available yet.</p>
-            )
-          ) : null}
-        </div>
-      </section>
+              <div className="product-review-stream">
+                <div className="product-review-list">
+                  {reviews.length ? (
+                    reviews.map((review) => (
+                      <article className="product-review-card" key={review.id}>
+                        <div className="product-review-author">
+                          <strong>{getReviewUserName(review)}</strong>
+                          {review.createdAt ? (
+                            <time dateTime={review.createdAt}>
+                              {new Date(review.createdAt).toLocaleDateString()}
+                            </time>
+                          ) : null}
+                        </div>
+                        <div className="product-review-content">
+                          <div className="product-review-score">
+                            <RatingStars rating={review.rating} showCount={false} />
+                            <span>{review.rating}</span>
+                          </div>
+                          {review.title ? <h3>{review.title}</h3> : null}
+                          <p>{review.body}</p>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="empty-surface">
+                      <h2>No reviews yet</h2>
+                      <p>Be the first to share your experience with this product.</p>
+                    </div>
+                  )}
+                </div>
 
-      <section className="product-reviews-section">
-        <div className="product-reviews-heading">
-          <div>
-            <p className="eyebrow">Reviews</p>
-            <h2>Customer Reviews</h2>
-          </div>
-          <RatingStars count={reviewCount} rating={averageRating} />
-        </div>
+                <form className="product-review-form" onSubmit={submitReview}>
+                  <h3>{userReview ? "Update your review" : "Write a review"}</h3>
+                  <div className="review-rating-input" aria-label="Select rating">
+                    {Array.from({ length: 5 }, (_, index) => {
+                      const rating = index + 1;
 
-        <div className="product-review-layout">
-          <form className="product-review-form" onSubmit={submitReview}>
-            <h3>{userReview ? "Update your review" : "Write a review"}</h3>
-            <div className="review-rating-input" aria-label="Select rating">
-              {Array.from({ length: 5 }, (_, index) => {
-                const rating = index + 1;
-
-                return (
-                  <button
-                    aria-label={`${rating} star${rating === 1 ? "" : "s"}`}
-                    className={rating <= reviewRating ? "selected" : undefined}
-                    disabled={isReviewSubmitting}
-                    key={rating}
-                    type="button"
-                    onClick={() => setReviewRating(rating)}
-                  >
-                    ★
-                  </button>
-                );
-              })}
-            </div>
-            <label>
-              Review message
-              <textarea
-                maxLength={1000}
-                placeholder="Share what stood out about this product"
-                required
-                rows={5}
-                value={reviewBody}
-                onChange={(event) => setReviewBody(event.target.value)}
-              />
-            </label>
-            {accessToken ? (
-              <button
-                className="primary-button"
-                disabled={isReviewSubmitting}
-                type="submit"
-              >
-                {isReviewSubmitting ? "Submitting..." : "Submit Review"}
-              </button>
-            ) : (
-              <Link className="primary-link-button" href="/login">
-                Login to Review
-              </Link>
-            )}
-            {reviewSuccess ? <p className="form-success">{reviewSuccess}</p> : null}
-            {reviewError ? <p className="form-error">{reviewError}</p> : null}
-          </form>
-
-          <div className="product-review-list">
-            {reviews.length ? (
-              reviews.map((review) => (
-                <article className="product-review-card" key={review.id}>
-                  <div>
-                    <strong>{getReviewUserName(review)}</strong>
-                    <RatingStars rating={review.rating} showCount={false} />
+                      return (
+                        <button
+                          aria-label={`${rating} star${rating === 1 ? "" : "s"}`}
+                          className={rating <= reviewRating ? "selected" : undefined}
+                          disabled={isReviewSubmitting}
+                          key={rating}
+                          type="button"
+                          onClick={() => setReviewRating(rating)}
+                        >
+                          ★
+                        </button>
+                      );
+                    })}
                   </div>
-                  {review.title ? <h3>{review.title}</h3> : null}
-                  <p>{review.body}</p>
-                </article>
-              ))
-            ) : (
-              <div className="empty-surface">
-                <h2>No reviews yet</h2>
-                <p>Be the first to share your experience with this product.</p>
+                  <label>
+                    Review message
+                    <textarea
+                      maxLength={1000}
+                      placeholder="Share what stood out about this product"
+                      required
+                      rows={5}
+                      value={reviewBody}
+                      onChange={(event) => setReviewBody(event.target.value)}
+                    />
+                  </label>
+                  {accessToken ? (
+                    <button
+                      className="primary-button"
+                      disabled={isReviewSubmitting}
+                      type="submit"
+                    >
+                      {isReviewSubmitting ? "Submitting..." : "Submit Review"}
+                    </button>
+                  ) : (
+                    <Link className="primary-link-button" href="/login">
+                      Login to Review
+                    </Link>
+                  )}
+                  {reviewSuccess ? <p className="form-success">{reviewSuccess}</p> : null}
+                  {reviewError ? <p className="form-error">{reviewError}</p> : null}
+                </form>
               </div>
-            )}
-          </div>
+            </div>
+          ) : null}
+
+          {activeTab === "Benefits" ? (
+            <div className="product-detail-content-grid">
+              {galleryImages[1] ?? galleryImages[0] ? (
+                <img
+                  alt={(galleryImages[1] ?? galleryImages[0])?.altText ?? product.name}
+                  src={(galleryImages[1] ?? galleryImages[0])?.url}
+                />
+              ) : null}
+              <div className="product-detail-copy">
+                {productInformation.groups
+                  .filter((group) => ["Benefits", "Targets", "Highlights"].includes(group.title))
+                  .map((group) => (
+                    <section className="product-information-group" key={group.title}>
+                      <h3>{group.title}</h3>
+                      <div>
+                        {group.items.map((item) => (
+                          <span key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                {product.usageInstructions ? <p>{product.usageInstructions}</p> : null}
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === "Other Details" ? (
+            <div className="product-detail-content-grid">
+              {galleryImages[2] ?? galleryImages[0] ? (
+                <img
+                  alt={(galleryImages[2] ?? galleryImages[0])?.altText ?? product.name}
+                  src={(galleryImages[2] ?? galleryImages[0])?.url}
+                />
+              ) : null}
+              <div className="product-other-details">
+                <div className="product-feature-strip product-feature-strip-panel">
+                  {[
+                    ["return", "30 Days Return"],
+                    ["quality", "100% Quality Guarantee"],
+                    ["plant", "Vegan & Cruelty Free"],
+                  ].map(([icon, title]) => (
+                    <article key={title}>
+                      <span>
+                        <ProductDetailSvgIcon icon={icon as ProductDetailIcon} />
+                      </span>
+                      <p>{title}</p>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="product-disclosure-list">
+                  <article className="open">
+                    <div>
+                      <h3>Return policy</h3>
+                      <span aria-hidden="true">-</span>
+                    </div>
+                    <p>
+                      Returns are accepted within 30 days when the item is unused,
+                      unopened, and in its original packaging.
+                    </p>
+                  </article>
+                  <article>
+                    <div>
+                      <h3>Shipping details</h3>
+                      <span aria-hidden="true">+</span>
+                    </div>
+                    <p>
+                      Free shipping is available on eligible orders. Delivery timing
+                      may vary by address and selected shipping method.
+                    </p>
+                  </article>
+                  <article>
+                    <div>
+                      <h3>Usage and warnings</h3>
+                      <span aria-hidden="true">+</span>
+                    </div>
+                    <p>
+                      {product.usageInstructions ??
+                        "Use as part of your daily skincare routine according to your skin needs."}
+                      {product.warnings ? ` ${product.warnings}` : ""}
+                    </p>
+                  </article>
+                </div>
+
+              {product.ingredients?.length ? (
+                <article className="product-other-detail-group">
+                  <h3>What are the key ingredients?</h3>
+                  <div className="detail-chip-list">
+                    {product.ingredients.map((item) => (
+                      <article className="detail-chip" key={item.ingredient.id}>
+                        <h3>
+                          {item.ingredient.name}
+                          {item.isKeyIngredient ? " (Key)" : ""}
+                        </h3>
+                        {item.ingredient.inciName ? (
+                          <p>INCI: {item.ingredient.inciName}</p>
+                        ) : null}
+                        {item.purpose ? <p>Purpose: {item.purpose}</p> : null}
+                        {item.concentration ? (
+                          <p>Concentration: {item.concentration}</p>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                </article>
+              ) : null}
+              {combinedAttributes.length ? <AttributeRows items={combinedAttributes} /> : null}
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
