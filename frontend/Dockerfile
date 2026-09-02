@@ -6,7 +6,7 @@ COPY package*.json ./
 
 FROM base AS development
 
-RUN npm ci --omit=optional
+RUN npm ci
 
 COPY . .
 
@@ -16,7 +16,7 @@ CMD ["npm", "run", "dev"]
 
 FROM base AS build
 
-RUN npm ci --omit=optional
+RUN npm ci
 
 COPY . .
 
