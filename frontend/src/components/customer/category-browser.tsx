@@ -47,7 +47,7 @@ function CategoryCard({
       )}
       <div>
         <strong>{category.name}</strong>
-        {category.description ? <p>{category.description}</p> : null}
+        {category.description ? <p className="category-description"> {category.description} </p> : null}
       </div>
     </Link>
   );

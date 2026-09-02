@@ -48,6 +48,22 @@ function MenuIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="m6 6 12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
+function ArrowLeftIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M19 12H5m6-6-6 6 6 6" />
+    </svg>
+  );
+}
+
 function SearchIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -115,7 +131,14 @@ export function UserNavbar() {
   );
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isExploreOpen, setIsExploreOpen] = useState(false);
+  const [activeExploreCategoryId, setActiveExploreCategoryId] = useState<
+    string | null
+  >(null);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMobileExploreOpen, setIsMobileExploreOpen] = useState(false);
+  const [activeMobileCategoryId, setActiveMobileCategoryId] = useState<
+    string | null
+  >(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
   const exploreCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -168,6 +191,36 @@ export function UserNavbar() {
     [categories],
   );
 
+  const childCategoriesByParentId = useMemo(() => {
+    const nextChildren = new Map<string, customerApi.CustomerCategory[]>();
+
+    for (const category of categories) {
+      if (!category.parentId) {
+        continue;
+      }
+
+      const siblings = nextChildren.get(category.parentId) ?? [];
+      siblings.push(category);
+      nextChildren.set(category.parentId, siblings);
+    }
+
+    return nextChildren;
+  }, [categories]);
+
+  const resolvedActiveExploreCategoryId =
+    activeExploreCategoryId &&
+    rootCategories.some((category) => category.id === activeExploreCategoryId)
+      ? activeExploreCategoryId
+      : rootCategories[0]?.id;
+
+  const activeExploreCategory = rootCategories.find(
+    (category) => category.id === resolvedActiveExploreCategoryId,
+  );
+
+  const activeExploreChildren = activeExploreCategory
+    ? (childCategoriesByParentId.get(activeExploreCategory.id) ?? [])
+    : [];
+
   const featuredCategories = rootCategories.slice(0, 3);
 
   async function handleLogout() {
@@ -181,11 +234,17 @@ export function UserNavbar() {
     setIsAccountMenuOpen(false);
     setIsExploreOpen(false);
     setIsMobileOpen(false);
+    setIsMobileExploreOpen(false);
+    setActiveMobileCategoryId(null);
   }
 
   function openExploreMenu() {
     if (exploreCloseTimeoutRef.current) {
       clearTimeout(exploreCloseTimeoutRef.current);
+    }
+
+    if (!activeExploreCategoryId && rootCategories[0]) {
+      setActiveExploreCategoryId(rootCategories[0].id);
     }
 
     setIsExploreOpen(true);
@@ -252,26 +311,79 @@ export function UserNavbar() {
                 >
                   <div className="explore-panel-content">
                     <div className="explore-link-groups">
-                      <div>
+                      <div className="explore-category-menu">
                         <h2>Categories</h2>
-                        <ul className="explore-category-grid">
-                          {rootCategories.length ? (
-                            rootCategories.map((category) => (
-                              <li key={category.id}>
-                                <Link
-                                  href={`/categories/${category.slug}`}
-                                  onClick={closeMenus}
-                                >
-                                  {category.name}
-                                </Link>
+                        <div className="explore-category-columns">
+                          <ul
+                            className={
+                              rootCategories.length > 3
+                                ? "explore-category-grid explore-root-categories two-column"
+                                : "explore-category-grid explore-root-categories"
+                            }
+                            aria-label="Root categories"
+                          >
+                            {rootCategories.length ? (
+                              rootCategories.map((category) => {
+                                const isActive =
+                                  category.id === activeExploreCategory?.id;
+
+                                return (
+                                  <li key={category.id}>
+                                    <Link
+                                      className={
+                                        isActive ? "active" : undefined
+                                      }
+                                      href={`/categories/${category.slug}`}
+                                      onClick={closeMenus}
+                                      onFocus={() =>
+                                        setActiveExploreCategoryId(category.id)
+                                      }
+                                      onMouseEnter={() =>
+                                        setActiveExploreCategoryId(category.id)
+                                      }
+                                    >
+                                      {category.name}
+                                    </Link>
+                                  </li>
+                                );
+                              })
+                            ) : (
+                              <li>
+                                <span>No categories yet</span>
                               </li>
-                            ))
-                          ) : (
-                            <li>
-                              <span>No child categories yet</span>
-                            </li>
-                          )}
-                        </ul>
+                            )}
+                          </ul>
+                          <div className="explore-child-panel">
+                            <h3>
+                              {activeExploreCategory
+                                ? activeExploreCategory.name
+                                : "Subcategories"}
+                            </h3>
+                            {activeExploreCategory ? (
+                              activeExploreChildren.length ? (
+                                <ul
+                                  className="explore-category-grid explore-child-categories"
+                                  aria-label={`${activeExploreCategory.name} child categories`}
+                                >
+                                  {activeExploreChildren.map((category) => (
+                                    <li key={category.id}>
+                                      <Link
+                                        href={`/categories/${category.slug}`}
+                                        onClick={closeMenus}
+                                      >
+                                        {category.name}
+                                      </Link>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p>No child categories yet</p>
+                              )
+                            ) : (
+                              <p>Choose a category</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                     {featuredCategories.length ? (
@@ -327,11 +439,11 @@ export function UserNavbar() {
             <button
               className="nav-icon-button mobile-menu-button"
               type="button"
-              aria-label="Open menu"
+              aria-label={isMobileOpen ? "Close menu" : "Open menu"}
               aria-expanded={isMobileOpen}
               onClick={() => setIsMobileOpen((current) => !current)}
             >
-              <MenuIcon/>
+              {isMobileOpen ? <CloseIcon /> : <MenuIcon />}
             </button>
             <form
               className="nav-search-form desktop-nav-search"
@@ -397,55 +509,183 @@ export function UserNavbar() {
         </div>
 
         {isMobileOpen ? (
-          <div className="mobile-nav-panel">
-            <div className="mobile-nav-controls">
-              <form
-                className="nav-search-form mobile-nav-search"
-                onSubmit={handleSearchSubmit}
-              >
-                <input
-                  aria-label="Search products"
-                  placeholder="Search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
-                <button type="submit" aria-label="Search">
-                  <SearchIcon />
-                </button>
-              </form>
-              <label className="currency-picker mobile-currency-picker">
-                <select
-                  aria-label="Select currency"
-                  value={selectedCurrency?.code ?? ""}
-                  disabled={isLoadingCurrencies || currencies.length === 0}
-                  onChange={(event) =>
-                    setSelectedCurrencyCode(event.target.value)
-                  }
+          <>
+            <button
+              className="mobile-nav-backdrop"
+              type="button"
+              aria-label="Close menu"
+              onClick={closeMenus}
+            />
+            <div className="mobile-nav-panel">
+              <div className="mobile-nav-header">
+                <BrandLogo />
+                <button
+                  className="nav-icon-button"
+                  type="button"
+                  aria-label="Close menu"
+                  onClick={closeMenus}
                 >
-                  {currencies.map((currency) => (
-                    <option value={currency.code} key={currency.code}>
-                      {currency.code}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <CloseIcon />
+                </button>
+              </div>
+              <div className="mobile-nav-body">
+                <div className="mobile-nav-controls">
+                  <form
+                    className="nav-search-form mobile-nav-search"
+                    onSubmit={handleSearchSubmit}
+                  >
+                    <input
+                      aria-label="Search products"
+                      placeholder="Search"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                    />
+                    <button type="submit" aria-label="Search">
+                      <SearchIcon />
+                    </button>
+                  </form>
+                  <label className="currency-picker mobile-currency-picker">
+                    <select
+                      aria-label="Select currency"
+                      value={selectedCurrency?.code ?? ""}
+                      disabled={isLoadingCurrencies || currencies.length === 0}
+                      onChange={(event) =>
+                        setSelectedCurrencyCode(event.target.value)
+                      }
+                    >
+                      {currencies.map((currency) => (
+                        <option value={currency.code} key={currency.code}>
+                          {currency.code}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="mobile-nav-links">
+                  <Link href="/" onClick={closeMenus}>
+                    Home
+                  </Link>
+                  <button
+                    className="mobile-explore-trigger"
+                    type="button"
+                    aria-expanded={isMobileExploreOpen}
+                    onClick={() => {
+                      setIsMobileExploreOpen((current) => !current);
+                      setActiveMobileCategoryId(null);
+                    }}
+                  >
+                    Explore
+                    <ChevronIcon />
+                  </button>
+                  {isMobileExploreOpen ? (
+                    <MobileExplorePanel
+                      activeCategoryId={activeMobileCategoryId}
+                      childCategoriesByParentId={childCategoriesByParentId}
+                      onBack={() => setActiveMobileCategoryId(null)}
+                      onClose={closeMenus}
+                      onSelectCategory={setActiveMobileCategoryId}
+                      rootCategories={rootCategories}
+                    />
+                  ) : null}
+                  <Link href="/shop" onClick={closeMenus}>
+                    Shop
+                  </Link>
+                  <Link href="/checkout" onClick={closeMenus}>
+                    Checkout
+                  </Link>
+                </div>
+              </div>
             </div>
-            <Link href="/" onClick={closeMenus}>
-              Home
-            </Link>
-            <Link href="/shop" onClick={closeMenus}>
-              Shop
-            </Link>
-            <Link href="/categories" onClick={closeMenus}>
-              Explore
-            </Link>
-            <Link href="/checkout" onClick={closeMenus}>
-              Checkout
-            </Link>
-          </div>
+          </>
         ) : null}
       </nav>
     </header>
+  );
+}
+
+function MobileExplorePanel({
+  activeCategoryId,
+  childCategoriesByParentId,
+  onBack,
+  onClose,
+  onSelectCategory,
+  rootCategories,
+}: {
+  activeCategoryId: string | null;
+  childCategoriesByParentId: Map<string, customerApi.CustomerCategory[]>;
+  onBack: () => void;
+  onClose: () => void;
+  onSelectCategory: (categoryId: string) => void;
+  rootCategories: customerApi.CustomerCategory[];
+}) {
+  const activeCategory = rootCategories.find(
+    (category) => category.id === activeCategoryId,
+  );
+  const childCategories = activeCategory
+    ? (childCategoriesByParentId.get(activeCategory.id) ?? [])
+    : [];
+
+  if (!rootCategories.length) {
+    return (
+      <div className="mobile-explore-panel">
+        <p>No categories yet</p>
+      </div>
+    );
+  }
+
+  if (activeCategory) {
+    return (
+      <div className="mobile-explore-panel">
+        <button
+          className="mobile-explore-back"
+          type="button"
+          aria-label="Back to categories"
+          onClick={onBack}
+        >
+          <ArrowLeftIcon />
+        </button>
+        <div className="mobile-explore-heading">
+          <span>{activeCategory.name}</span>
+        </div>
+        {childCategories.length ? (
+          <div className="mobile-explore-children flat">
+            {childCategories.map((childCategory) => (
+              <Link
+                href={`/categories/${childCategory.slug}`}
+                key={childCategory.id}
+                onClick={onClose}
+              >
+                {childCategory.name}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <Link
+            className="mobile-explore-empty-link"
+            href={`/categories/${activeCategory.slug}`}
+            onClick={onClose}
+          >
+            Open category
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mobile-explore-panel">
+      {rootCategories.map((category) => (
+        <button
+          className="mobile-explore-root-button"
+          key={category.id}
+          type="button"
+          onClick={() => onSelectCategory(category.id)}
+        >
+          {category.name}
+          <ChevronIcon />
+        </button>
+      ))}
+    </div>
   );
 }
 
