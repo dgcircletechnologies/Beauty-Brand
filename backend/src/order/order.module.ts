@@ -8,6 +8,7 @@ import { AccessTokenMiddleware } from '../common/middleware/access-token.middlew
 import { allowRoles } from '../common/middleware/role.middleware';
 import { CurrencyModule } from '../currency/currency.module';
 import { DatabaseModule } from '../database/database.module';
+import { OfferModule } from '../offer/offer.module';
 import { ShippingModule } from '../shipping/shipping.module';
 import { AdminOrderController } from './admin/admin-order.controller';
 import { CustomerOrderController } from './customer/customer-order.controller';
@@ -18,6 +19,7 @@ import { OrderService } from './order.service';
     DatabaseModule,
     CommonModule,
     CurrencyModule,
+    OfferModule,
     ShippingModule,
     JwtModule.register({}),
     ConfigModule,

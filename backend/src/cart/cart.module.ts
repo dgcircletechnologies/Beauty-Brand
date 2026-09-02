@@ -8,6 +8,7 @@ import { AccessTokenMiddleware } from '../common/middleware/access-token.middlew
 import { allowRoles } from '../common/middleware/role.middleware';
 import { CurrencyModule } from '../currency/currency.module';
 import { DatabaseModule } from '../database/database.module';
+import { OfferModule } from '../offer/offer.module';
 import { CartService } from './cart.service';
 import { CustomerCartController } from './customer/customer-cart.controller';
 
@@ -16,6 +17,7 @@ import { CustomerCartController } from './customer/customer-cart.controller';
     DatabaseModule,
     CommonModule,
     CurrencyModule,
+    OfferModule,
     JwtModule.register({}),
     ConfigModule,
   ],

@@ -16,6 +16,8 @@ model ProductVariant {
   images          ProductImage[]
   cartItems       CartItem[]
   orderItems      OrderItem[]
+  offerTargets    OfferTarget[]           @relation("VariantOfferTargets")
+  rewardOffers    OfferBuyXGetY[]         @relation("OfferBuyXGetYRewardVariant")
 
   @@index([productId])
   @@index([isActive])

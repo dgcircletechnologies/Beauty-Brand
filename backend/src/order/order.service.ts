@@ -4,10 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 
+import { Prisma } from '../../generated/prisma/client.cjs';
 import {
   CancellationRequestStatus,
   CartStatus,
+  OfferType,
   OrderAddressType,
   OrderStatus,
   PaymentStatus,
@@ -16,6 +19,10 @@ import {
 } from '../../generated/prisma/enums.cjs';
 import { CurrencyService } from '../currency/currency.service';
 import { PrismaService } from '../database/prisma.service';
+import {
+  OfferResolverResult,
+  OfferResolverService,
+} from '../offer/services/offer-resolver.service';
 import { ShippingService } from '../shipping/shipping.service';
 import { CheckoutPreviewDto } from './dto/checkout-preview.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -24,12 +31,49 @@ import { RequestCancellationDto } from './dto/request-cancellation.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpsertShipmentDto } from './dto/upsert-shipment.dto';
 
+type ActiveCart = Awaited<ReturnType<OrderService['getActiveCart']>>;
+type ActiveCartItem = ActiveCart['items'][number];
+type OrderRewardVariant = ActiveCartItem['variant'];
+
+type TrustedCheckoutItem = {
+  id: string;
+  cartItemId?: string;
+  sourceCartItemId?: string;
+  productId: string;
+  variantId: string;
+  productName: string;
+  variantLabel: string;
+  sku: string;
+  quantity: number;
+  unitBasePrice: Prisma.Decimal;
+  unitDiscountAmount: Prisma.Decimal;
+  unitFinalPrice: Prisma.Decimal;
+  lineBaseSubtotal: Prisma.Decimal;
+  lineDiscountAmount: Prisma.Decimal;
+  lineFinalSubtotal: Prisma.Decimal;
+  taxAmount: Prisma.Decimal;
+  hasOffer: boolean;
+  offer: {
+    id: string;
+    name: string;
+    type: OfferType;
+    value: string | null;
+    maxDiscountAmount: string | null;
+  } | null;
+  buyXGetY: OfferResolverResult['buyXGetY'];
+  isOfferReward: boolean;
+  sourceOfferId?: string | null;
+  sourceOrderItemId?: string | null;
+  sourceVariant?: OrderRewardVariant;
+};
+
 @Injectable()
 export class OrderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly currencyService: CurrencyService,
     private readonly shippingService: ShippingService,
+    private readonly offerResolverService: OfferResolverService,
   ) {}
 
   async getCheckoutPreview(userId: string, dto: CheckoutPreviewDto) {
@@ -43,7 +87,11 @@ export class OrderService {
       items,
     );
     const shippingAvailability = dto.shippingAddressId
-      ? await this.getShippingAvailability(dto.shippingAddressId, userId, totals)
+      ? await this.getShippingAvailability(
+          dto.shippingAddressId,
+          userId,
+          totals,
+        )
       : {
           country: null,
           zone: null,
@@ -78,6 +126,9 @@ export class OrderService {
       exchangeRate: totals.rate,
       baseCurrency: totals.baseCurrency,
       items: items.map((item) => this.toCheckoutItem(item, totals)),
+      rewardItems: totals.rewardItems.map((item) =>
+        this.toCheckoutRewardItem(item, totals),
+      ),
       itemCount: items.reduce((total, item) => total + item.quantity, 0),
       baseSubtotal: totals.baseSubtotal,
       displaySubtotal: totals.displaySubtotal,
@@ -86,7 +137,8 @@ export class OrderService {
       displayShippingAmount,
       shippingAmount: displayShippingAmount,
       taxAmount: 0,
-      discountAmount: 0,
+      discountAmount: totals.discountAmount,
+      rewardSavings: totals.rewardSavings,
       baseTotalAmount,
       displayTotalAmount,
       totalAmount: displayTotalAmount,
@@ -175,6 +227,28 @@ export class OrderService {
   }
 
   async createPendingPaymentOrder(userId: string, dto: CreateOrderDto) {
+    const requestIdempotencyKey = this.normalizeCheckoutIdempotencyKey(
+      userId,
+      dto.idempotencyKey,
+    );
+
+    if (requestIdempotencyKey) {
+      const existingOrder = await this.prisma.order.findUnique({
+        where: {
+          idempotencyKey: requestIdempotencyKey,
+        },
+        include: this.orderInclude(),
+      });
+
+      if (existingOrder) {
+        if (existingOrder.userId !== userId) {
+          throw new BadRequestException('Invalid checkout request');
+        }
+
+        return this.toOrderView(existingOrder);
+      }
+    }
+
     const cart = await this.getActiveCart(userId);
     const items = this.pickCartItems(cart.items, dto.cartItemIds);
 
@@ -216,7 +290,7 @@ export class OrderService {
         data: {
           userId,
           orderNumber,
-          idempotencyKey: `${orderNumber}-${userId}`,
+          idempotencyKey: requestIdempotencyKey ?? `${orderNumber}-${userId}`,
           status: OrderStatus.PENDING_PAYMENT,
           baseCurrencyCode: totals.baseCurrency.code,
           displayCurrencyCode: totals.displayCurrency.code,
@@ -225,7 +299,8 @@ export class OrderService {
           subtotal: totals.baseSubtotal,
           shippingAmount: baseShippingAmount,
           taxAmount: 0,
-          discountAmount: 0,
+          discountAmount: totals.discountAmount,
+          rewardSavings: totals.rewardSavings,
           totalAmount: baseTotalAmount,
           shippingRateId: shippingRate.id,
           shippingMethodName: shippingRate.name,
@@ -237,32 +312,14 @@ export class OrderService {
             user.phone,
           placedAt: now,
           items: {
-            create: items.map((item) => {
-              const baseUnitPrice = Number(item.variant.price);
-              const lineSubtotal = this.roundMoney(
-                baseUnitPrice * item.quantity,
-                totals.baseCurrency.decimalDigits,
-              );
-
-              return {
-                productId: item.variant.product.id,
-                variantId: item.variant.id,
-                productName: item.variant.product.name,
-                variantLabel: item.variant.sku,
-                sku: item.variant.sku,
-                quantity: item.quantity,
-                baseUnitPrice,
-                unitPrice: baseUnitPrice,
-                lineSubtotal,
-                taxAmount: 0,
-                discountAmount: 0,
-                lineTotal: lineSubtotal,
-              };
-            }),
+            create: [...totals.paidOrderItems, ...totals.rewardOrderItems],
           },
           addresses: {
             create: [
-              this.toAddressSnapshot(OrderAddressType.SHIPPING, shippingAddress),
+              this.toAddressSnapshot(
+                OrderAddressType.SHIPPING,
+                shippingAddress,
+              ),
               this.toAddressSnapshot(OrderAddressType.BILLING, billingAddress),
             ],
           },
@@ -299,7 +356,10 @@ export class OrderService {
         include: this.orderInclude(),
       });
 
-      for (const item of items) {
+      for (const item of [
+        ...totals.paidOrderItems,
+        ...totals.rewardOrderItems,
+      ]) {
         await tx.productVariant.update({
           where: {
             id: item.variantId,
@@ -374,7 +434,8 @@ export class OrderService {
 
       const existingPayment =
         order.payments.find(
-          (transaction) => transaction.providerIntentId === payment.providerOrderId,
+          (transaction) =>
+            transaction.providerIntentId === payment.providerOrderId,
         ) ?? order.payments[0];
 
       if (!existingPayment) {
@@ -865,7 +926,9 @@ export class OrderService {
     const selectedItems = items.filter((item) => selectedIds.includes(item.id));
 
     if (selectedItems.length !== selectedIds.length) {
-      throw new BadRequestException('One or more selected cart items are invalid');
+      throw new BadRequestException(
+        'One or more selected cart items are invalid',
+      );
     }
 
     return selectedItems;
@@ -914,22 +977,62 @@ export class OrderService {
       baseCurrency.code,
       displayCurrencyCode,
     );
-    const displayCurrency = await this.currencyService.ensureActiveCurrency(
-      displayCurrencyCode,
+    const displayCurrency =
+      await this.currencyService.ensureActiveCurrency(displayCurrencyCode);
+    const rate = new Prisma.Decimal(exchangeRate.rate);
+    const pricingByVariantId =
+      await this.offerResolverService.resolveForVariants(
+        items.map((item) => item.variantId),
+      );
+    const checkoutItems = items.map((item) =>
+      this.toTrustedCheckoutItem(item, pricingByVariantId.get(item.variantId)),
     );
-    const baseSubtotal = items.reduce(
-      (total, item) => total + Number(item.variant.price) * item.quantity,
-      0,
+    const rewardItems = await this.toTrustedRewardItems(checkoutItems);
+    const baseSubtotal = checkoutItems.reduce(
+      (total, item) => total.plus(item.lineFinalSubtotal),
+      new Prisma.Decimal(0),
+    );
+    const basePreDiscountSubtotal = checkoutItems.reduce(
+      (total, item) => total.plus(item.lineBaseSubtotal),
+      new Prisma.Decimal(0),
+    );
+    const discountAmount = checkoutItems.reduce(
+      (total, item) => total.plus(item.lineDiscountAmount),
+      new Prisma.Decimal(0),
+    );
+    const rewardSavings = rewardItems.reduce(
+      (total, item) => total.plus(item.lineDiscountAmount),
+      new Prisma.Decimal(0),
     );
 
     return {
       baseCurrency,
       displayCurrency,
       rate: exchangeRate.rate,
+      rateDecimal: rate,
       exchangeRateEffectiveAt: exchangeRate.effectiveAt,
-      baseSubtotal: this.roundMoney(baseSubtotal, baseCurrency.decimalDigits),
-      displaySubtotal: this.roundMoney(
-        baseSubtotal * exchangeRate.rate,
+      checkoutItems,
+      rewardItems,
+      paidOrderItems: checkoutItems.map((item) => this.toOrderItemData(item)),
+      rewardOrderItems: rewardItems.map((item) => this.toOrderItemData(item)),
+      basePreDiscountSubtotal: this.decimalToRoundedNumber(
+        basePreDiscountSubtotal,
+        baseCurrency.decimalDigits,
+      ),
+      discountAmount: this.decimalToRoundedNumber(
+        discountAmount,
+        baseCurrency.decimalDigits,
+      ),
+      rewardSavings: this.decimalToRoundedNumber(
+        rewardSavings,
+        baseCurrency.decimalDigits,
+      ),
+      baseSubtotal: this.decimalToRoundedNumber(
+        baseSubtotal,
+        baseCurrency.decimalDigits,
+      ),
+      displaySubtotal: this.decimalToRoundedNumber(
+        baseSubtotal.mul(rate),
         displayCurrency.decimalDigits,
       ),
     };
@@ -939,13 +1042,20 @@ export class OrderService {
     item: Awaited<ReturnType<OrderService['getActiveCart']>>['items'][number],
     totals: Awaited<ReturnType<OrderService['calculateTotals']>>,
   ) {
-    const baseUnitPrice = Number(item.variant.price);
-    const displayUnitPrice = this.roundMoney(
-      baseUnitPrice * totals.rate,
+    const checkoutItem = totals.checkoutItems.find(
+      (resolvedItem) => resolvedItem.cartItemId === item.id,
+    );
+
+    if (!checkoutItem) {
+      throw new BadRequestException('Unable to calculate checkout item');
+    }
+
+    const displayUnitPrice = this.decimalToRoundedNumber(
+      checkoutItem.unitFinalPrice.mul(totals.rateDecimal),
       totals.displayCurrency.decimalDigits,
     );
-    const displayLineTotal = this.roundMoney(
-      displayUnitPrice * item.quantity,
+    const displayLineTotal = this.decimalToRoundedNumber(
+      checkoutItem.lineFinalSubtotal.mul(totals.rateDecimal),
       totals.displayCurrency.decimalDigits,
     );
 
@@ -956,15 +1066,291 @@ export class OrderService {
       productName: item.variant.product.name,
       sku: item.variant.sku,
       quantity: item.quantity,
-      baseUnitPrice,
-      baseLineTotal: this.roundMoney(
-        baseUnitPrice * item.quantity,
+      baseUnitPrice: this.decimalToRoundedNumber(
+        checkoutItem.unitBasePrice,
+        totals.baseCurrency.decimalDigits,
+      ),
+      baseLineTotal: this.decimalToRoundedNumber(
+        checkoutItem.lineFinalSubtotal,
         totals.baseCurrency.decimalDigits,
       ),
       displayUnitPrice,
       displayLineTotal,
       unitPrice: displayUnitPrice,
       lineTotal: displayLineTotal,
+      pricing: {
+        unitBasePrice: this.decimalToMoney(checkoutItem.unitBasePrice),
+        unitDiscountAmount: this.decimalToMoney(
+          checkoutItem.unitDiscountAmount,
+        ),
+        unitFinalPrice: this.decimalToMoney(checkoutItem.unitFinalPrice),
+        lineBaseSubtotal: this.decimalToMoney(checkoutItem.lineBaseSubtotal),
+        lineDiscountAmount: this.decimalToMoney(
+          checkoutItem.lineDiscountAmount,
+        ),
+        lineFinalSubtotal: this.decimalToMoney(checkoutItem.lineFinalSubtotal),
+        hasOffer: checkoutItem.hasOffer,
+        offer: checkoutItem.offer,
+        buyXGetY: checkoutItem.buyXGetY,
+      },
+    };
+  }
+
+  private toCheckoutRewardItem(
+    item: TrustedCheckoutItem,
+    totals: Awaited<ReturnType<OrderService['calculateTotals']>>,
+  ) {
+    return {
+      isOfferReward: true,
+      sourceOfferId: item.sourceOfferId,
+      sourceCartItemId: item.sourceCartItemId,
+      productId: item.productId,
+      variantId: item.variantId,
+      productName: item.productName,
+      sku: item.sku,
+      quantity: item.quantity,
+      unitPrice: this.decimalToMoney(item.unitBasePrice),
+      discountAmount: this.decimalToMoney(item.lineDiscountAmount),
+      finalUnitPrice: this.decimalToMoney(item.unitFinalPrice),
+      lineTotal: this.decimalToMoney(item.lineFinalSubtotal),
+      displayUnitPrice: this.decimalToRoundedNumber(
+        item.unitBasePrice.mul(totals.rateDecimal),
+        totals.displayCurrency.decimalDigits,
+      ),
+      displayLineTotal: 0,
+      offer: item.offer,
+    };
+  }
+
+  private toTrustedCheckoutItem(
+    item: ActiveCartItem,
+    resolvedPricing?: OfferResolverResult,
+  ): TrustedCheckoutItem {
+    const unitBasePrice = resolvedPricing
+      ? resolvedPricing.basePrice
+      : new Prisma.Decimal(item.variant.price);
+    const unitDiscountAmount =
+      resolvedPricing?.discountAmount ?? new Prisma.Decimal(0);
+    const unitFinalPrice =
+      resolvedPricing?.finalPrice ?? new Prisma.Decimal(item.variant.price);
+    const lineBaseSubtotal = unitBasePrice.mul(item.quantity);
+    const lineDiscountAmount = unitDiscountAmount.mul(item.quantity);
+    const lineFinalSubtotal = unitFinalPrice.mul(item.quantity);
+    const orderItemId = this.generateSnapshotItemId();
+    const offer = resolvedPricing?.offer
+      ? this.toOfferSnapshot(resolvedPricing.offer)
+      : null;
+
+    return {
+      id: orderItemId,
+      cartItemId: item.id,
+      productId: item.variant.product.id,
+      variantId: item.variant.id,
+      productName: item.variant.product.name,
+      variantLabel: item.variant.sku,
+      sku: item.variant.sku,
+      quantity: item.quantity,
+      unitBasePrice,
+      unitDiscountAmount,
+      unitFinalPrice,
+      lineBaseSubtotal,
+      lineDiscountAmount,
+      lineFinalSubtotal,
+      taxAmount: new Prisma.Decimal(0),
+      hasOffer: resolvedPricing?.hasOffer ?? false,
+      offer,
+      buyXGetY: resolvedPricing?.buyXGetY ?? null,
+      isOfferReward: false,
+      sourceOfferId: null,
+      sourceOrderItemId: null,
+      sourceVariant: item.variant,
+    };
+  }
+
+  private async toTrustedRewardItems(
+    checkoutItems: TrustedCheckoutItem[],
+  ): Promise<TrustedCheckoutItem[]> {
+    const rewardItems: TrustedCheckoutItem[] = [];
+
+    for (const item of checkoutItems) {
+      if (
+        !item.hasOffer ||
+        !item.offer ||
+        !item.buyXGetY ||
+        !item.sourceVariant
+      ) {
+        continue;
+      }
+
+      const rewardGroups = Math.floor(
+        item.quantity / item.buyXGetY.buyQuantity,
+      );
+      const quantity = rewardGroups * item.buyXGetY.getQuantity;
+
+      if (quantity <= 0) {
+        continue;
+      }
+
+      const rewardVariant = await this.findRewardVariant(
+        item.sourceVariant,
+        item.buyXGetY,
+      );
+
+      if (!rewardVariant) {
+        throw new BadRequestException(
+          'Configured offer reward is no longer available. Please refresh your cart.',
+        );
+      }
+
+      if (quantity > rewardVariant.stockQuantity) {
+        throw new BadRequestException(
+          `Only ${rewardVariant.stockQuantity} reward item(s) are available for ${rewardVariant.product.name}`,
+        );
+      }
+
+      const unitBasePrice = new Prisma.Decimal(rewardVariant.price);
+      const lineBaseSubtotal = unitBasePrice.mul(quantity);
+
+      rewardItems.push({
+        id: this.generateSnapshotItemId(),
+        sourceCartItemId: item.cartItemId,
+        productId: rewardVariant.product.id,
+        variantId: rewardVariant.id,
+        productName: rewardVariant.product.name,
+        variantLabel: rewardVariant.sku,
+        sku: rewardVariant.sku,
+        quantity,
+        unitBasePrice,
+        unitDiscountAmount: unitBasePrice,
+        unitFinalPrice: new Prisma.Decimal(0),
+        lineBaseSubtotal,
+        lineDiscountAmount: lineBaseSubtotal,
+        lineFinalSubtotal: new Prisma.Decimal(0),
+        taxAmount: new Prisma.Decimal(0),
+        hasOffer: true,
+        offer: item.offer,
+        buyXGetY: null,
+        isOfferReward: true,
+        sourceOfferId: item.offer.id,
+        sourceOrderItemId: item.id,
+        sourceVariant: rewardVariant,
+      });
+    }
+
+    this.ensureCombinedStockAvailable([...checkoutItems, ...rewardItems]);
+
+    return rewardItems;
+  }
+
+  private async findRewardVariant(
+    sourceVariant: OrderRewardVariant,
+    bogo: NonNullable<OfferResolverResult['buyXGetY']>,
+  ): Promise<OrderRewardVariant | null> {
+    if (bogo.rewardVariantId) {
+      return this.prisma.productVariant.findFirst({
+        where: {
+          id: bogo.rewardVariantId,
+          deletedAt: null,
+          isActive: true,
+          product: {
+            deletedAt: null,
+            status: ProductStatus.PUBLISHED,
+          },
+        },
+        include: {
+          product: true,
+        },
+      });
+    }
+
+    if (bogo.rewardProductId) {
+      return this.prisma.productVariant.findFirst({
+        where: {
+          productId: bogo.rewardProductId,
+          deletedAt: null,
+          isActive: true,
+          product: {
+            deletedAt: null,
+            status: ProductStatus.PUBLISHED,
+          },
+        },
+        include: {
+          product: true,
+        },
+        orderBy: {
+          price: 'asc',
+        },
+      });
+    }
+
+    return sourceVariant;
+  }
+
+  private ensureCombinedStockAvailable(items: TrustedCheckoutItem[]) {
+    const quantityByVariantId = new Map<string, number>();
+    const stockByVariantId = new Map<string, number>();
+    const productNameByVariantId = new Map<string, string>();
+
+    for (const item of items) {
+      quantityByVariantId.set(
+        item.variantId,
+        (quantityByVariantId.get(item.variantId) ?? 0) + item.quantity,
+      );
+
+      if (item.sourceVariant) {
+        stockByVariantId.set(item.variantId, item.sourceVariant.stockQuantity);
+        productNameByVariantId.set(item.variantId, item.productName);
+      } else if (!stockByVariantId.has(item.variantId)) {
+        stockByVariantId.set(item.variantId, item.quantity);
+        productNameByVariantId.set(item.variantId, item.productName);
+      }
+    }
+
+    for (const [variantId, quantity] of quantityByVariantId) {
+      const stockQuantity = stockByVariantId.get(variantId) ?? 0;
+
+      if (quantity > stockQuantity) {
+        throw new BadRequestException(
+          `Only ${stockQuantity} item(s) are available for ${productNameByVariantId.get(variantId) ?? 'this product'}`,
+        );
+      }
+    }
+  }
+
+  private toOrderItemData(item: TrustedCheckoutItem) {
+    return {
+      id: item.id,
+      productId: item.productId,
+      variantId: item.variantId,
+      productName: item.productName,
+      variantLabel: item.variantLabel,
+      sku: item.sku,
+      quantity: item.quantity,
+      baseUnitPrice: item.unitBasePrice,
+      unitPrice: item.unitFinalPrice,
+      lineSubtotal: item.lineBaseSubtotal,
+      taxAmount: item.taxAmount,
+      discountAmount: item.lineDiscountAmount,
+      unitDiscountAmount: item.unitDiscountAmount,
+      appliedOfferId: item.offer?.id ?? null,
+      appliedOfferName: item.offer?.name ?? null,
+      appliedOfferType: item.offer?.type ?? null,
+      appliedOfferValue: item.offer?.value ?? null,
+      appliedOfferMaxDiscountAmount: item.offer?.maxDiscountAmount ?? null,
+      isOfferReward: item.isOfferReward,
+      sourceOfferId: item.sourceOfferId ?? null,
+      sourceOrderItemId: item.sourceOrderItemId ?? null,
+      lineTotal: item.lineFinalSubtotal,
+    };
+  }
+
+  private toOfferSnapshot(offer: NonNullable<OfferResolverResult['offer']>) {
+    return {
+      id: offer.id,
+      name: offer.name,
+      type: offer.type,
+      value: this.nullableDecimalToMoney(offer.value),
+      maxDiscountAmount: this.nullableDecimalToMoney(offer.maxDiscountAmount),
     };
   }
 
@@ -1218,18 +1604,21 @@ export class OrderService {
     });
   }
 
-  private toAddressSnapshot(type: OrderAddressType, address: {
-    firstName: string;
-    lastName: string;
-    company: string | null;
-    line1: string;
-    line2: string | null;
-    city: string;
-    stateOrProvince: string | null;
-    postalCode: string;
-    countryCode: string;
-    phone: string | null;
-  }) {
+  private toAddressSnapshot(
+    type: OrderAddressType,
+    address: {
+      firstName: string;
+      lastName: string;
+      company: string | null;
+      line1: string;
+      line2: string | null;
+      city: string;
+      stateOrProvince: string | null;
+      postalCode: string;
+      countryCode: string;
+      phone: string | null;
+    },
+  ) {
     return {
       type,
       firstName: address.firstName,
@@ -1319,29 +1708,55 @@ export class OrderService {
       baseShippingAmount: Number(order.shippingAmount),
       baseTaxAmount: Number(order.taxAmount),
       baseDiscountAmount: Number(order.discountAmount),
+      baseRewardSavings: Number(order.rewardSavings ?? 0),
       baseTotalAmount: Number(order.totalAmount),
       displaySubtotal: convert(order.subtotal),
       displayShippingAmount: convert(order.shippingAmount),
       displayTaxAmount: convert(order.taxAmount),
       displayDiscountAmount: convert(order.discountAmount),
+      displayRewardSavings: convert(order.rewardSavings ?? 0),
       displayTotalAmount: convert(order.totalAmount),
       subtotal: Number(order.subtotal),
       shippingAmount: Number(order.shippingAmount),
       taxAmount: Number(order.taxAmount),
       discountAmount: Number(order.discountAmount),
+      rewardSavings: Number(order.rewardSavings ?? 0),
       totalAmount: Number(order.totalAmount),
       items: order.items.map((item: any) => ({
         ...item,
         baseUnitPrice: Number(item.baseUnitPrice),
-        baseLineTotal: Number(item.lineTotal),
+        unitDiscountAmount: Number(item.unitDiscountAmount ?? 0),
+        finalUnitPrice: Number(item.unitPrice),
+        baseLineTotal: Number(item.lineSubtotal),
+        lineBaseSubtotal: Number(item.lineSubtotal),
+        lineDiscountAmount: Number(item.discountAmount),
+        lineFinalSubtotal: Number(item.lineTotal),
         displayUnitPrice: convert(item.unitPrice),
         displayLineTotal: convert(item.lineTotal),
         unitPrice: Number(item.unitPrice),
+        discountAmount: Number(item.discountAmount),
         lineTotal: Number(item.lineTotal),
-        image:
-          item.variant?.images?.[0] ??
-          item.product?.images?.[0] ??
-          null,
+        offer: item.appliedOfferId
+          ? {
+              id: item.appliedOfferId,
+              name: item.appliedOfferName,
+              type: item.appliedOfferType,
+              value:
+                item.appliedOfferValue === null ||
+                item.appliedOfferValue === undefined
+                  ? null
+                  : String(item.appliedOfferValue),
+              maxDiscountAmount:
+                item.appliedOfferMaxDiscountAmount === null ||
+                item.appliedOfferMaxDiscountAmount === undefined
+                  ? null
+                  : String(item.appliedOfferMaxDiscountAmount),
+            }
+          : null,
+        isOfferReward: item.isOfferReward ?? false,
+        sourceOfferId: item.sourceOfferId ?? null,
+        sourceOrderItemId: item.sourceOrderItemId ?? null,
+        image: item.variant?.images?.[0] ?? item.product?.images?.[0] ?? null,
         product: undefined,
         variant: undefined,
       })),
@@ -1372,9 +1787,37 @@ export class OrderService {
     return `BW-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
   }
 
+  private generateSnapshotItemId() {
+    return randomUUID();
+  }
+
+  private normalizeCheckoutIdempotencyKey(
+    userId: string,
+    idempotencyKey?: string,
+  ) {
+    const trimmedKey = idempotencyKey?.trim();
+
+    return trimmedKey ? `${userId}:${trimmedKey}` : null;
+  }
+
   private roundMoney(amount: number, decimalDigits: number): number {
     const factor = 10 ** decimalDigits;
     return Math.round((amount + Number.EPSILON) * factor) / factor;
+  }
+
+  private decimalToRoundedNumber(
+    amount: Prisma.Decimal,
+    decimalDigits: number,
+  ): number {
+    return new Prisma.Decimal(amount.toFixed(decimalDigits)).toNumber();
+  }
+
+  private decimalToMoney(value: Prisma.Decimal) {
+    return value.toFixed(2);
+  }
+
+  private nullableDecimalToMoney(value: Prisma.Decimal | null) {
+    return value ? value.toFixed(2) : null;
   }
 
   private nullableTrim(value?: string | null): string | null {

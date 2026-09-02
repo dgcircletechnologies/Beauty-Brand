@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { PrismaService } from '../database/prisma.service';
+import { OfferResolverService } from '../offer/services/offer-resolver.service';
 import { CategoryService } from './category.service';
 
 type CategoryDelegateMock = {
@@ -24,6 +25,11 @@ type ProductDelegateMock = {
   findMany: jest.Mock;
 };
 
+type OfferResolverMock = {
+  resolveForCategory: jest.Mock;
+  resolveForVariants: jest.Mock;
+};
+
 type CategoryTransactionMock = {
   category: CategoryDelegateMock;
   categoryClosure: CategoryClosureDelegateMock;
@@ -45,11 +51,41 @@ const categoryImagesInclude = {
   },
 };
 
+const categoryProductInclude = {
+  images: {
+    where: {
+      deletedAt: null,
+      variantId: null,
+    },
+    orderBy: [
+      {
+        isPrimary: 'desc',
+      },
+      {
+        sortOrder: 'asc',
+      },
+      {
+        createdAt: 'asc',
+      },
+    ],
+  },
+  variants: {
+    where: {
+      deletedAt: null,
+      isActive: true,
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
+  },
+};
+
 describe('CategoryService', () => {
   let service: CategoryService;
   let category: CategoryDelegateMock;
   let categoryClosure: CategoryClosureDelegateMock;
   let product: ProductDelegateMock;
+  let offerResolver: OfferResolverMock;
 
   beforeEach(async () => {
     category = {
@@ -70,6 +106,15 @@ describe('CategoryService', () => {
     product = {
       findMany: jest.fn(),
     };
+    offerResolver = {
+      resolveForCategory: jest.fn().mockResolvedValue({
+        hasOffer: false,
+        offer: null,
+        matchedBy: null,
+        buyXGetY: null,
+      }),
+      resolveForVariants: jest.fn().mockResolvedValue(new Map()),
+    };
 
     const runTransaction = <T>(callback: (tx: CategoryTransactionMock) => T) =>
       callback({
@@ -88,6 +133,10 @@ describe('CategoryService', () => {
             product,
             $transaction: jest.fn(runTransaction),
           },
+        },
+        {
+          provide: OfferResolverService,
+          useValue: offerResolver,
         },
       ],
     }).compile();
@@ -291,9 +340,14 @@ describe('CategoryService', () => {
     ]);
     product.findMany.mockResolvedValue(expectedProducts);
 
-    await expect(service.findPublicProductsBySlug('skin-care')).resolves.toBe(
-      expectedProducts,
-    );
+    await expect(
+      service.findPublicProductsBySlug('skin-care'),
+    ).resolves.toEqual([
+      {
+        ...expectedProducts[0],
+        variants: [],
+      },
+    ]);
 
     expect(category.findFirst).toHaveBeenCalledWith({
       where: {
@@ -339,6 +393,7 @@ describe('CategoryService', () => {
           },
         },
       },
+      include: categoryProductInclude,
       orderBy: [
         {
           isFeatured: 'desc',
@@ -375,7 +430,17 @@ describe('CategoryService', () => {
 
     await expect(service.findPublicBySlug('skin-care')).resolves.toEqual({
       ...expectedCategory,
-      products: expectedProducts,
+      offer: {
+        hasOffer: false,
+        offer: null,
+        buyXGetY: null,
+      },
+      products: [
+        {
+          ...expectedProducts[0],
+          variants: [],
+        },
+      ],
     });
 
     expect(category.findFirst).toHaveBeenCalledWith({
@@ -425,6 +490,7 @@ describe('CategoryService', () => {
           },
         },
       },
+      include: categoryProductInclude,
       orderBy: [
         {
           isFeatured: 'desc',
@@ -474,6 +540,7 @@ describe('CategoryService', () => {
           },
         },
       },
+      include: categoryProductInclude,
       orderBy: [
         {
           isFeatured: 'desc',

@@ -1,9 +1,4 @@
-import {
-  IsArray,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateOrderDto {
   @IsOptional()
@@ -30,4 +25,8 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   customerPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
 }

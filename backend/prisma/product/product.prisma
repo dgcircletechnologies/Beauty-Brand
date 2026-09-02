@@ -32,6 +32,8 @@ model Product {
   wishlistItems   WishlistItem[]
   reviews         Review[]
   orderItems      OrderItem[]
+  offerTargets    OfferTarget[]           @relation("ProductOfferTargets")
+  rewardOffers    OfferBuyXGetY[]         @relation("OfferBuyXGetYRewardProduct")
   seo             ProductSeo?
 
   @@index([status])

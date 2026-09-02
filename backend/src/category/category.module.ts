@@ -7,6 +7,7 @@ import { CommonModule } from '../common/common.module';
 import { AccessTokenMiddleware } from '../common/middleware/access-token.middleware';
 import { allowRoles } from '../common/middleware/role.middleware';
 import { DatabaseModule } from '../database/database.module';
+import { OfferModule } from '../offer/offer.module';
 import { AdminCategoryController } from './admin/admin-category.controller';
 import { AdminCategoryImageController } from './admin/admin-category-image.controller';
 import { AdminProductCategoryController } from './admin/admin-product-category.controller';
@@ -17,7 +18,13 @@ import { ProductCategoryService } from './product-category.service';
 import { CategoryPublicController } from './public/public-category.controller';
 
 @Module({
-  imports: [DatabaseModule, CommonModule, JwtModule.register({}), ConfigModule],
+  imports: [
+    DatabaseModule,
+    CommonModule,
+    JwtModule.register({}),
+    ConfigModule,
+    OfferModule,
+  ],
   controllers: [
     AdminCategoryController,
     AdminCategoryImageController,

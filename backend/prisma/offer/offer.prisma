@@ -1,0 +1,68 @@
+model Offer {
+  id                String    @id @default(cuid())
+  name              String
+  description       String?   @db.Text
+  type              OfferType
+  value             Decimal?  @db.Decimal(10, 2)
+  maxDiscountAmount Decimal?  @db.Decimal(10, 2)
+  startAt           DateTime?
+  endAt             DateTime?
+  isActive          Boolean   @default(true)
+  priority          Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  targets        OfferTarget[]
+  buyXGetYConfig OfferBuyXGetY?
+
+  @@index([type])
+  @@index([isActive])
+  @@index([startAt])
+  @@index([endAt])
+  @@index([priority])
+  @@index([isActive, startAt, endAt])
+}
+
+model OfferTarget {
+  id         String   @id @default(cuid())
+  offerId    String
+  productId  String?
+  categoryId String?
+  variantId  String?
+  createdAt  DateTime @default(now())
+
+  offer    Offer           @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  product  Product?        @relation("ProductOfferTargets", fields: [productId], references: [id], onDelete: Cascade)
+  category Category?       @relation("CategoryOfferTargets", fields: [categoryId], references: [id], onDelete: Cascade)
+  variant  ProductVariant? @relation("VariantOfferTargets", fields: [variantId], references: [id], onDelete: Cascade)
+
+  /// Exactly one of productId, categoryId, or variantId should be populated.
+  /// Enforce this invariant in application logic or with a database CHECK constraint in migration SQL.
+  @@unique([offerId, productId])
+  @@unique([offerId, categoryId])
+  @@unique([offerId, variantId])
+  @@index([productId])
+  @@index([categoryId])
+  @@index([variantId])
+}
+
+model OfferBuyXGetY {
+  id              String   @id @default(cuid())
+  offerId         String   @unique
+  buyQuantity     Int
+  getQuantity     Int
+  rewardProductId String?
+  rewardVariantId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  offer         Offer           @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  rewardProduct Product?        @relation("OfferBuyXGetYRewardProduct", fields: [rewardProductId], references: [id], onDelete: SetNull)
+  rewardVariant ProductVariant? @relation("OfferBuyXGetYRewardVariant", fields: [rewardVariantId], references: [id], onDelete: SetNull)
+
+  /// Only one of rewardProductId or rewardVariantId should normally be populated.
+  /// When both are null, application logic should use the qualifying product or variant as the reward.
+  /// Enforce this invariant in application logic or with a database CHECK constraint in migration SQL.
+  @@index([rewardProductId])
+  @@index([rewardVariantId])
+}

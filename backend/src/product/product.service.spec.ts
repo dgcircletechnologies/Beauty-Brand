@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { ProductStatus } from '../../generated/prisma/enums.cjs';
 import { PrismaService } from '../database/prisma.service';
+import { OfferResolverService } from '../offer/services/offer-resolver.service';
 import { ProductMetadataService } from './product-metadata.service';
 import { ProductService } from './product.service';
 
@@ -64,6 +65,12 @@ describe('ProductService', () => {
             findAllMetadataOptions: jest.fn(),
           },
         },
+        {
+          provide: OfferResolverService,
+          useValue: {
+            resolveForVariants: jest.fn().mockResolvedValue(new Map()),
+          },
+        },
       ],
     }).compile();
 
@@ -84,6 +91,8 @@ describe('ProductService', () => {
     ).resolves.toEqual({
       ...expectedProduct,
       images: [],
+      averageRating: 0,
+      reviewCount: 0,
     });
 
     expect(product.findFirst).toHaveBeenCalledWith({
@@ -214,6 +223,19 @@ function getExpectedProductInclude(onlyActiveVariants: boolean) {
           isActive: true,
         }),
       },
+      ...(onlyActiveVariants && {
+        include: {
+          attributeValues: {
+            include: {
+              attribute: true,
+              option: true,
+            },
+            orderBy: {
+              createdAt: 'asc',
+            },
+          },
+        },
+      }),
       orderBy: {
         createdAt: 'desc',
       },
@@ -256,5 +278,30 @@ function getExpectedProductInclude(onlyActiveVariants: boolean) {
         benefit: true,
       },
     },
+    tags: {
+      include: {
+        tag: true,
+      },
+    },
+    ...(onlyActiveVariants && {
+      reviews: {
+        where: {
+          deletedAt: null,
+          status: 'APPROVED',
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      },
+    }),
   };
 }

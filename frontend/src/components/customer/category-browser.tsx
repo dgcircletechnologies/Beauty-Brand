@@ -334,7 +334,7 @@ export function CategoryDrilldown({ slug }: { slug: string }) {
       ) : category ? (
         <>
           <section className="category-browser-hero">
-            <Link className="category-breadcrumb" href="/categories">
+            <Link className="category-breadcrumb text-4xl!" href="/categories">
               Categories
             </Link>
             <p className="eyebrow">

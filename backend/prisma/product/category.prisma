@@ -12,9 +12,10 @@ model Category {
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
   children Category[] @relation("CategoryTree")
 
-  products   ProductCategory[]
-  attributes CategoryAttribute[]
-  images     CategoryImage[]
+  products     ProductCategory[]
+  attributes   CategoryAttribute[]
+  images       CategoryImage[]
+  offerTargets OfferTarget[]       @relation("CategoryOfferTargets")
 
   ancestorLinks   CategoryClosure[] @relation("CategoryClosureAncestor")
   descendantLinks CategoryClosure[] @relation("CategoryClosureDescendant")

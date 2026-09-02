@@ -7,6 +7,7 @@ import { CommonModule } from '../common/common.module';
 import { AccessTokenMiddleware } from '../common/middleware/access-token.middleware';
 import { allowRoles } from '../common/middleware/role.middleware';
 import { DatabaseModule } from '../database/database.module';
+import { OfferModule } from '../offer/offer.module';
 import { AdminProductMetadataController } from './admin/admin-product-metadata.controller';
 import { AdminProductController } from './admin/admin-product.controller';
 import {
@@ -24,7 +25,13 @@ import { ProductPublicController } from './public/public-product.controller';
 import { ProductVariantService } from './variant/product-variant.service';
 
 @Module({
-  imports: [DatabaseModule, CommonModule, JwtModule.register({}), ConfigModule],
+  imports: [
+    DatabaseModule,
+    CommonModule,
+    JwtModule.register({}),
+    ConfigModule,
+    OfferModule,
+  ],
   controllers: [
     ProductPublicController,
     AdminProductController,

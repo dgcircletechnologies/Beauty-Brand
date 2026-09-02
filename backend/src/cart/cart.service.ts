@@ -4,20 +4,45 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
+import { Prisma } from '../../generated/prisma/client.cjs';
 import { CartStatus, ProductStatus } from '../../generated/prisma/enums.cjs';
 import { CurrencyService } from '../currency/currency.service';
 import { PrismaService } from '../database/prisma.service';
+import {
+  OfferResolverResult,
+  OfferResolverService,
+} from '../offer/services/offer-resolver.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartCurrencyDto } from './dto/update-cart-currency.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
 type CartWithItems = Awaited<ReturnType<CartService['findActiveCartRecord']>>;
+type CartItemWithVariant = NonNullable<CartWithItems>['items'][number];
+type CartVariant = CartItemWithVariant['variant'];
+
+type RewardIssue = {
+  sourceCartItemId: string;
+  sourceOfferId: string;
+  message: string;
+};
+
+type PricedCartLineForRewards = {
+  id: string;
+  variantId: string;
+  sourceVariant: CartVariant;
+  quantity: number;
+  availability: {
+    isAvailable: boolean;
+  };
+  resolvedPricing?: OfferResolverResult;
+};
 
 @Injectable()
 export class CartService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly currencyService: CurrencyService,
+    private readonly offerResolverService: OfferResolverService,
   ) {}
 
   async getActiveCart(userId: string) {
@@ -239,28 +264,72 @@ export class CartService {
       baseCurrency.code,
       cart.currencyCode,
     );
+    const exchangeRateDecimal = new Prisma.Decimal(exchangeRate.rate);
+    const pricingByVariantId =
+      await this.offerResolverService.resolveForVariants(
+        cart.items.map((item) => item.variantId),
+      );
+    const rewardIssues: RewardIssue[] = [];
 
     const items = cart.items.map((item) => {
-      const baseUnitPrice = Number(item.variant.price);
-      const baseLineTotal = baseUnitPrice * item.quantity;
+      const resolvedPricing = pricingByVariantId.get(item.variantId);
+      const unitBasePrice = resolvedPricing
+        ? resolvedPricing.basePrice
+        : new Prisma.Decimal(item.variant.price);
+      const unitDiscountAmount =
+        resolvedPricing?.discountAmount ?? new Prisma.Decimal(0);
+      const unitFinalPrice =
+        resolvedPricing?.finalPrice ?? new Prisma.Decimal(item.variant.price);
+      const lineBaseSubtotal = unitBasePrice.mul(item.quantity);
+      const lineDiscountAmount = unitDiscountAmount.mul(item.quantity);
+      const lineFinalSubtotal = unitFinalPrice.mul(item.quantity);
       const availability = this.getCartItemAvailability(item);
-      const displayUnitPrice = this.roundMoney(
-        baseUnitPrice * exchangeRate.rate,
+      const displayUnitPrice = this.decimalToRoundedNumber(
+        unitFinalPrice.mul(exchangeRateDecimal),
         cart.currency.decimalDigits,
       );
-      const displayLineTotal = this.roundMoney(
-        baseLineTotal * exchangeRate.rate,
+      const displayLineTotal = this.decimalToRoundedNumber(
+        lineFinalSubtotal.mul(exchangeRateDecimal),
         cart.currency.decimalDigits,
       );
+      const offer = resolvedPricing?.offer
+        ? {
+            id: resolvedPricing.offer.id,
+            name: resolvedPricing.offer.name,
+            type: resolvedPricing.offer.type,
+            value: this.nullableDecimalToMoney(resolvedPricing.offer.value),
+            maxDiscountAmount: this.nullableDecimalToMoney(
+              resolvedPricing.offer.maxDiscountAmount,
+            ),
+          }
+        : null;
 
       return {
         id: item.id,
         variantId: item.variantId,
         quantity: item.quantity,
-        baseUnitPrice,
-        baseLineTotal,
+        baseUnitPrice: this.decimalToRoundedNumber(
+          unitBasePrice,
+          baseCurrency.decimalDigits,
+        ),
+        baseLineTotal: this.decimalToRoundedNumber(
+          lineFinalSubtotal,
+          baseCurrency.decimalDigits,
+        ),
         displayUnitPrice,
         displayLineTotal,
+        pricing: {
+          unitBasePrice: this.decimalToMoney(unitBasePrice),
+          unitDiscountAmount: this.decimalToMoney(unitDiscountAmount),
+          unitFinalPrice: this.decimalToMoney(unitFinalPrice),
+          lineBaseSubtotal: this.decimalToMoney(lineBaseSubtotal),
+          lineDiscountAmount: this.decimalToMoney(lineDiscountAmount),
+          lineFinalSubtotal: this.decimalToMoney(lineFinalSubtotal),
+          hasOffer: resolvedPricing?.hasOffer ?? false,
+          offer,
+          buyXGetY: resolvedPricing?.buyXGetY ?? null,
+        },
+        resolvedPricing,
         availability,
         product: {
           id: item.variant.product.id,
@@ -275,16 +344,35 @@ export class CartService {
           deletedAt: item.variant.deletedAt,
           attributeValues: item.variant.attributeValues,
         },
-        image:
-          item.variant.images[0] ??
-          item.variant.product.images[0] ??
-          null,
+        sourceVariant: item.variant,
+        image: item.variant.images[0] ?? item.variant.product.images[0] ?? null,
       };
     });
 
+    const rewardItems = await this.buildRewardItems(
+      items,
+      cart.currency.decimalDigits,
+      exchangeRateDecimal,
+      rewardIssues,
+    );
     const baseSubtotal = items.reduce(
-      (total, item) => total + item.baseLineTotal,
-      0,
+      (total, item) =>
+        total.plus(new Prisma.Decimal(item.pricing.lineFinalSubtotal)),
+      new Prisma.Decimal(0),
+    );
+    const basePreDiscountSubtotal = items.reduce(
+      (total, item) =>
+        total.plus(new Prisma.Decimal(item.pricing.lineBaseSubtotal)),
+      new Prisma.Decimal(0),
+    );
+    const discountTotal = items.reduce(
+      (total, item) =>
+        total.plus(new Prisma.Decimal(item.pricing.lineDiscountAmount)),
+      new Prisma.Decimal(0),
+    );
+    const rewardSavings = rewardItems.reduce(
+      (total, item) => total.plus(new Prisma.Decimal(item.discountAmount)),
+      new Prisma.Decimal(0),
     );
 
     return {
@@ -293,22 +381,193 @@ export class CartService {
       currency: cart.currency,
       baseCurrency,
       exchangeRate,
-      items,
+      items: items.map((item) => this.toPublicCartItem(item)),
+      rewardItems,
+      rewardIssues,
       itemCount: items.reduce((total, item) => total + item.quantity, 0),
       hasUnavailableItems: items.some((item) => !item.availability.isAvailable),
-      baseSubtotal: this.roundMoney(baseSubtotal, baseCurrency.decimalDigits),
-      displaySubtotal: this.roundMoney(
-        baseSubtotal * exchangeRate.rate,
+      baseSubtotal: this.decimalToRoundedNumber(
+        baseSubtotal,
+        baseCurrency.decimalDigits,
+      ),
+      displaySubtotal: this.decimalToRoundedNumber(
+        baseSubtotal.mul(exchangeRateDecimal),
         cart.currency.decimalDigits,
       ),
+      summary: {
+        baseSubtotal: this.decimalToMoney(basePreDiscountSubtotal),
+        discountTotal: this.decimalToMoney(discountTotal),
+        finalSubtotal: this.decimalToMoney(baseSubtotal),
+        rewardSavings: this.decimalToMoney(rewardSavings),
+        displayFinalSubtotal: this.decimalToMoney(
+          this.roundDecimal(
+            baseSubtotal.mul(exchangeRateDecimal),
+            cart.currency.decimalDigits,
+          ),
+        ),
+      },
       createdAt: cart.createdAt,
       updatedAt: cart.updatedAt,
     };
   }
 
-  private roundMoney(amount: number, decimalDigits: number): number {
-    const factor = 10 ** decimalDigits;
-    return Math.round((amount + Number.EPSILON) * factor) / factor;
+  private toPublicCartItem(item: Record<string, unknown>) {
+    const publicItem = { ...item };
+
+    delete publicItem.resolvedPricing;
+    delete publicItem.sourceVariant;
+
+    return publicItem;
+  }
+
+  private async buildRewardItems(
+    items: PricedCartLineForRewards[],
+    displayDecimalDigits: number,
+    exchangeRate: Prisma.Decimal,
+    rewardIssues: RewardIssue[],
+  ) {
+    const rewardItems = [];
+
+    for (const item of items) {
+      const resolvedPricing = item.resolvedPricing;
+      const bogo = resolvedPricing?.buyXGetY;
+
+      if (
+        !resolvedPricing?.hasOffer ||
+        !resolvedPricing.offer ||
+        !bogo ||
+        !item.availability.isAvailable
+      ) {
+        continue;
+      }
+
+      const rewardGroups = Math.floor(item.quantity / bogo.buyQuantity);
+      const quantity = rewardGroups * bogo.getQuantity;
+
+      if (quantity <= 0) {
+        continue;
+      }
+
+      const rewardVariant = await this.findRewardVariant(item, bogo);
+
+      if (!rewardVariant) {
+        rewardIssues.push({
+          sourceCartItemId: item.id,
+          sourceOfferId: resolvedPricing.offer.id,
+          message: 'Configured offer reward is no longer available',
+        });
+        continue;
+      }
+
+      const unitPrice = new Prisma.Decimal(rewardVariant.price);
+      const discountAmount = unitPrice.mul(quantity);
+
+      rewardItems.push({
+        isOfferReward: true,
+        sourceOfferId: resolvedPricing.offer.id,
+        sourceCartItemId: item.id,
+        variantId: rewardVariant.id,
+        productId: rewardVariant.product.id,
+        name: rewardVariant.product.name,
+        quantity,
+        unitPrice: this.decimalToMoney(unitPrice),
+        discountAmount: this.decimalToMoney(discountAmount),
+        finalUnitPrice: this.decimalToMoney(new Prisma.Decimal(0)),
+        lineTotal: this.decimalToMoney(new Prisma.Decimal(0)),
+        displayUnitPrice: this.decimalToRoundedNumber(
+          unitPrice.mul(exchangeRate),
+          displayDecimalDigits,
+        ),
+        displayLineTotal: 0,
+        offer: {
+          id: resolvedPricing.offer.id,
+          name: resolvedPricing.offer.name,
+          type: resolvedPricing.offer.type,
+        },
+        product: {
+          id: rewardVariant.product.id,
+          name: rewardVariant.product.name,
+          slug: rewardVariant.product.slug,
+        },
+        variant: {
+          id: rewardVariant.id,
+          sku: rewardVariant.sku,
+          stockQuantity: rewardVariant.stockQuantity,
+          isActive: rewardVariant.isActive,
+          deletedAt: rewardVariant.deletedAt,
+          attributeValues: rewardVariant.attributeValues,
+        },
+        image:
+          rewardVariant.images[0] ?? rewardVariant.product.images[0] ?? null,
+      });
+    }
+
+    return rewardItems;
+  }
+
+  private async findRewardVariant(
+    sourceItem: {
+      variantId: string;
+      sourceVariant: CartVariant;
+    },
+    bogo: {
+      rewardProductId: string | null;
+      rewardVariantId: string | null;
+    },
+  ): Promise<CartVariant | null> {
+    if (bogo.rewardVariantId) {
+      return this.prisma.productVariant.findFirst({
+        where: {
+          id: bogo.rewardVariantId,
+          deletedAt: null,
+          isActive: true,
+          product: {
+            deletedAt: null,
+            status: ProductStatus.PUBLISHED,
+          },
+        },
+        include: this.getCartVariantInclude(),
+      });
+    }
+
+    if (bogo.rewardProductId) {
+      return this.prisma.productVariant.findFirst({
+        where: {
+          productId: bogo.rewardProductId,
+          deletedAt: null,
+          isActive: true,
+          product: {
+            deletedAt: null,
+            status: ProductStatus.PUBLISHED,
+          },
+        },
+        include: this.getCartVariantInclude(),
+        orderBy: {
+          price: 'asc',
+        },
+      });
+    }
+
+    return sourceItem.sourceVariant;
+  }
+
+  private decimalToRoundedNumber(
+    amount: Prisma.Decimal,
+    decimalDigits: number,
+  ): number {
+    return this.roundDecimal(amount, decimalDigits).toNumber();
+  }
+
+  private roundDecimal(amount: Prisma.Decimal, decimalDigits: number) {
+    return new Prisma.Decimal(amount.toFixed(decimalDigits));
+  }
+
+  private decimalToMoney(value: Prisma.Decimal) {
+    return value.toFixed(2);
+  }
+
+  private nullableDecimalToMoney(value: Prisma.Decimal | null) {
+    return value ? value.toFixed(2) : null;
   }
 
   private getCartImageOrderBy() {
@@ -323,6 +582,36 @@ export class CartService {
         createdAt: 'asc' as const,
       },
     ];
+  }
+
+  private getCartVariantInclude() {
+    return {
+      product: {
+        include: {
+          images: {
+            where: {
+              deletedAt: null,
+            },
+            orderBy: this.getCartImageOrderBy(),
+          },
+        },
+      },
+      images: {
+        where: {
+          deletedAt: null,
+        },
+        orderBy: this.getCartImageOrderBy(),
+      },
+      attributeValues: {
+        include: {
+          attribute: true,
+          option: true,
+        },
+        orderBy: {
+          createdAt: 'asc' as const,
+        },
+      },
+    };
   }
 
   private ensureCartItemCanBePurchased(

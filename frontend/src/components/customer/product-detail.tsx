@@ -901,7 +901,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                 type="button"
                 onClick={() => void addSelectedVariantToCart()}
               >
-                <span>
+                <span className="text-2xl!">
                   {addingVariantId === selectedVariant?.id
                     ? "Adding..."
                     : "Add to Cart"}
@@ -915,7 +915,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                 className="primary-link-button product-add-to-cart-button"
                 href="/login"
               >
-                <span>Login to Add</span>
+                <span className="text-2xl!">Login to Add</span>
                 <span className="product-add-to-cart-icon" aria-hidden="true">
                   <ProductDetailSvgIcon icon="bag" />
                 </span>
@@ -926,7 +926,7 @@ export function ProductDetail({ slug }: { slug: string }) {
           {success ? <p className="form-success">{success}</p> : null}
           {error ? <p className="form-error">{error}</p> : null}
 
-          <div className="product-feature-strip">
+          <div className="product-feature-strip flex! justify-between">
             {[
               ["return", "30 Days Return"],
               ["quality", "100% Quality Guarantee"],

@@ -7,6 +7,12 @@ import {
 
 import { ProductStatus } from '../../generated/prisma/enums.cjs';
 import { PrismaService } from '../database/prisma.service';
+import {
+  mapNoOfferPricing,
+  mapResolvedCategoryOffer,
+  mapResolvedPricing,
+} from '../offer/services/customer-offer-pricing.mapper';
+import { OfferResolverService } from '../offer/services/offer-resolver.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
@@ -21,7 +27,10 @@ export type PublicCategoryNode = {
 
 @Injectable()
 export class CategoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly offerResolverService: OfferResolverService,
+  ) {}
 
   async create(dto: CreateCategoryDto) {
     const parentId = dto.parentId?.trim() || null;
@@ -203,9 +212,13 @@ export class CategoryService {
 
     const categoryIds = await this.getCategoryAndDescendantIds(category.id);
     const products = await this.findPublicProductsByCategoryIds(categoryIds);
+    const categoryOffer = await this.offerResolverService.resolveForCategory(
+      category.id,
+    );
 
     return {
       ...category,
+      offer: mapResolvedCategoryOffer(categoryOffer),
       products,
     };
   }
@@ -231,8 +244,8 @@ export class CategoryService {
     return this.findPublicProductsByCategoryIds(categoryIds);
   }
 
-  private findPublicProductsByCategoryIds(categoryIds: string[]) {
-    return this.prisma.product.findMany({
+  private async findPublicProductsByCategoryIds(categoryIds: string[]) {
+    const products = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
         status: ProductStatus.PUBLISHED,
@@ -288,6 +301,38 @@ export class CategoryService {
         },
       ],
     });
+
+    return this.withPublicVariantPricing(products);
+  }
+
+  private async withPublicVariantPricing<
+    T extends { variants?: { id: string; price: unknown }[] },
+  >(products: T[]) {
+    const variantIds = products.flatMap((product) =>
+      (product.variants ?? []).map((variant) => variant.id),
+    );
+    const pricingByVariantId =
+      await this.offerResolverService.resolveForVariants(variantIds);
+
+    return products.map((product) => ({
+      ...product,
+      variants: (product.variants ?? []).map((variant) => {
+        const resolvedPricing = pricingByVariantId.get(variant.id);
+        const publicVariant = { ...variant } as {
+          id: string;
+          price: unknown;
+          compareAtPrice?: unknown;
+        };
+        delete publicVariant.compareAtPrice;
+
+        return {
+          ...publicVariant,
+          pricing: resolvedPricing
+            ? mapResolvedPricing(resolvedPricing)
+            : mapNoOfferPricing(variant.price as string | number),
+        };
+      }),
+    }));
   }
 
   private async getCategoryAndDescendantIds(

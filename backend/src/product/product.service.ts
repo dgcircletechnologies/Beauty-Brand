@@ -4,11 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import {
-  ProductStatus,
-  ReviewStatus,
-} from '../../generated/prisma/enums.cjs';
+import { ProductStatus, ReviewStatus } from '../../generated/prisma/enums.cjs';
 import { PrismaService } from '../database/prisma.service';
+import {
+  mapNoOfferPricing,
+  mapResolvedPricing,
+} from '../offer/services/customer-offer-pricing.mapper';
+import { OfferResolverService } from '../offer/services/offer-resolver.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductRelationsDto } from './dto/product-relations.dto';
 import { PublicProductQueryDto } from './dto/public-product-query.dto';
@@ -58,11 +60,17 @@ type RatingReview = {
   rating: number;
 };
 
+type PublicVariantWithPrice = {
+  id: string;
+  price: unknown;
+};
+
 @Injectable()
 export class ProductService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly productMetadataService: ProductMetadataService,
+    private readonly offerResolverService: OfferResolverService,
   ) {}
 
   async create(dto: CreateProductDto) {
@@ -230,8 +238,11 @@ export class ProductService {
       paginatedProducts.map((product) => product.id),
     );
 
+    const pricedProducts =
+      await this.withPublicVariantPricing(paginatedProducts);
+
     return {
-      items: paginatedProducts.map((product) => ({
+      items: pricedProducts.map((product) => ({
         ...product,
         images: imagesByProductId.get(product.id) ?? [],
       })),
@@ -267,16 +278,45 @@ export class ProductService {
     const variantImagesByVariantId = await this.getImagesByVariantId(
       product.variants.map((variant) => variant.id),
     );
+    const [pricedProduct] = await this.withPublicVariantPricing([product]);
 
     return {
-      ...product,
+      ...pricedProduct,
       images: imagesByProductId.get(product.id) ?? [],
-      variants: product.variants.map((variant) => ({
+      variants: pricedProduct.variants.map((variant) => ({
         ...variant,
         images: variantImagesByVariantId.get(variant.id) ?? [],
       })),
-      ...this.getReviewSummary(product.reviews),
+      ...this.getReviewSummary(product.reviews ?? []),
     };
+  }
+
+  private async withPublicVariantPricing<
+    T extends { variants?: PublicVariantWithPrice[] },
+  >(products: T[]) {
+    const variantIds = products.flatMap((product) =>
+      (product.variants ?? []).map((variant) => variant.id),
+    );
+    const pricingByVariantId =
+      await this.offerResolverService.resolveForVariants(variantIds);
+
+    return products.map((product) => ({
+      ...product,
+      variants: (product.variants ?? []).map((variant) => {
+        const resolvedPricing = pricingByVariantId.get(variant.id);
+        const publicVariant = { ...variant } as PublicVariantWithPrice & {
+          compareAtPrice?: unknown;
+        };
+        delete publicVariant.compareAtPrice;
+
+        return {
+          ...publicVariant,
+          pricing: resolvedPricing
+            ? mapResolvedPricing(resolvedPricing)
+            : mapNoOfferPricing(variant.price as string | number),
+        };
+      }),
+    }));
   }
 
   private getPublicProductFilters(query: PublicProductQueryDto) {
@@ -478,10 +518,15 @@ export class ProductService {
     };
   }
 
-  private sortPublicProducts<T extends { variants?: { price: unknown }[]; isFeatured: boolean; publishedAt: Date | null; createdAt: Date; averageRating: unknown }>(
-    products: T[],
-    sort = 'featured',
-  ) {
+  private sortPublicProducts<
+    T extends {
+      variants?: { price: unknown }[];
+      isFeatured: boolean;
+      publishedAt: Date | null;
+      createdAt: Date;
+      averageRating: unknown;
+    },
+  >(products: T[], sort = 'featured') {
     const priceOf = (product: T) => Number(product.variants?.[0]?.price ?? 0);
 
     return [...products].sort((first, second) => {
