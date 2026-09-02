@@ -58,6 +58,10 @@ function getDisplayRating(product: customerApi.CustomerProduct) {
   return Number((total / reviews.length).toFixed(1));
 }
 
+function getReviewCount(product: customerApi.CustomerProduct) {
+  return product.reviewCount ?? product.reviews?.length ?? 0;
+}
+
 function getTagBadgeTheme(slug: string) {
   const hash = slug
     .split("")
@@ -66,21 +70,14 @@ function getTagBadgeTheme(slug: string) {
   return tagBadgeThemes[hash % tagBadgeThemes.length];
 }
 
-function RatingStars({ rating, count }: { rating: number; count: number }) {
-  const roundedRating = Math.round(rating);
-
+function NumericRating({ rating }: { rating: number }) {
   return (
-    <span className="product-rating-row" aria-label={`${rating} out of 5 stars`}>
-      <span className="rating-stars" aria-hidden="true">
-        {Array.from({ length: 5 }, (_, index) => (
-          <span className={index < roundedRating ? "filled" : undefined} key={index}>
-            ★
-          </span>
-        ))}
-      </span>
-      <span className="rating-count">
-        {count ? `${rating.toFixed(1)} (${count})` : "No reviews"}
-      </span>
+    <span
+      className="home-product-rating"
+      aria-label={`${rating.toFixed(1)} out of 5 rating`}
+    >
+      <span aria-hidden="true">★</span>
+      {rating.toFixed(1)}
     </span>
   );
 }
@@ -106,7 +103,8 @@ function HomeProductCard({
   const [activeTagIndex, setActiveTagIndex] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
   const averageRating = useMemo(() => getDisplayRating(product), [product]);
-  const reviewCount = product.reviewCount ?? product.reviews?.length ?? 0;
+  const reviewCount = getReviewCount(product);
+  const shouldShowRating = reviewCount > 0 && averageRating > 0;
   const activeImage =
     images[Math.min(activeImageIndex, images.length - 1)] ?? images[0];
   const activeTag =
@@ -154,11 +152,13 @@ function HomeProductCard({
           </span>
         ) : null}
         <img alt={activeImage.altText ?? product.name} src={activeImage.url} />
-        <RatingStars count={reviewCount} rating={averageRating} />
       </span>
       <span className="home-product-info">
-        <small>{product.isFeatured ? "Featured" : "Skincare"}</small>
-        <strong>{product.name}</strong>
+        {/* <small>{product.isFeatured ? "Featured" : "Skincare"}</small> */}
+        <span className="home-product-name-row">
+          <strong>{product.name}</strong>
+          {shouldShowRating ? <NumericRating rating={averageRating} /> : null}
+        </span>
         <em>{formatPrice(getPrimaryPrice(product))}</em>
       </span>
     </Link>
@@ -271,31 +271,33 @@ function HomeProductsSection() {
   return (
     <section className="home-products-section" aria-labelledby="home-products">
       <div className="home-section-heading">
-        <Link className="home-browse-button" href="/shop">
-          Shop all
-          <span aria-hidden="true">
-            <ButtonArrowIcon />
-          </span>
-        </Link>
-        <div>
+        <div className="home-products-title">
           <p className="eyebrow">Products</p>
           <h2 id="home-products">Explore skincare essentials.</h2>
         </div>
-        <div className="home-carousel-buttons" aria-label="Product carousel">
-          <button
-            aria-label="Previous products"
-            type="button"
-            onClick={() => scrollProducts("previous")}
-          >
-            &lsaquo;
-          </button>
-          <button
-            aria-label="Next products"
-            type="button"
-            onClick={() => scrollProducts("next")}
-          >
-            &rsaquo;
-          </button>
+        <div className="home-category-actions">
+          <Link className="home-browse-button" href="/shop">
+            Shop all
+            <span aria-hidden="true">
+              <ButtonArrowIcon />
+            </span>
+          </Link>
+          <div className="home-carousel-buttons relative left-[1.25vw]" aria-label="Product carousel">
+            <button
+              aria-label="Previous products"
+              type="button"
+              onClick={() => scrollProducts("previous")}
+            >
+              &lsaquo;
+            </button>
+            <button
+              aria-label="Next products"
+              type="button"
+              onClick={() => scrollProducts("next")}
+            >
+              &rsaquo;
+            </button>
+          </div>
         </div>
       </div>
 

@@ -89,16 +89,28 @@ function ChevronIcon() {
   );
 }
 
+function FilterIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M3 5h18M6 12h12M10 19h4" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="m6 6 12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
 function ProductImageSlider({
   images,
-  rating,
-  reviewCount,
   tags,
   productName,
 }: {
   images: customerApi.CustomerProductImage[];
-  rating: number;
-  reviewCount: number;
   tags: customerApi.CustomerMetadataItem[];
   productName: string;
 }) {
@@ -149,7 +161,6 @@ function ProductImageSlider({
             {currentTag.name}
           </span>
         ) : null}
-        <RatingStars count={reviewCount} rating={rating} />
       </div>
     );
   }
@@ -240,26 +251,18 @@ function ProductImageSlider({
           />
         ))}
       </div>
-      <RatingStars count={reviewCount} rating={rating} />
     </div>
   );
 }
 
-function RatingStars({ rating, count }: { rating: number; count: number }) {
-  const roundedRating = Math.round(rating);
-
+function NumericRating({ rating, count }: { rating: number; count: number }) {
   return (
-    <span className="product-rating-row" aria-label={`${rating} out of 5 stars`}>
-      <span className="rating-stars" aria-hidden="true">
-        {Array.from({ length: 5 }, (_, index) => (
-          <span className={index < roundedRating ? "filled" : undefined} key={index}>
-            ★
-          </span>
-        ))}
-      </span>
-      <span className="rating-count">
-        {count ? `${rating.toFixed(1)} (${count})` : "No reviews"}
-      </span>
+    <span
+      className="shop-product-rating"
+      aria-label={`${rating.toFixed(1)} out of 5 rating from ${count} reviews`}
+    >
+      <span aria-hidden="true">★</span>
+      {rating.toFixed(1)} ({count})
     </span>
   );
 }
@@ -273,6 +276,7 @@ function ShopProductCard({
 }) {
   const averageRating = useMemo(() => getDisplayRating(product), [product]);
   const reviewCount = product.reviewCount ?? product.reviews?.length ?? 0;
+  const shouldShowRating = reviewCount > 0 && averageRating > 0;
   const productTags = product.tags?.map((tagLink) => tagLink.tag) ?? [];
 
   return (
@@ -281,19 +285,24 @@ function ShopProductCard({
         <ProductImageSlider
           images={product.images ?? []}
           productName={product.name}
-          rating={averageRating}
-          reviewCount={reviewCount}
           tags={productTags}
         />
       </Link>
       <div>
-        <div className="shop-product-meta-row">
-          <p>{product.categories?.[0]?.category.name ?? "Skincare"}</p>
-          <span>{formatPrice(getPrimaryPrice(product))}</span>
+        <div className="shop-product-name-row">
+          <h2>
+            <Link href={`/products/${product.slug}`}>{product.name}</Link>
+          </h2>
+          <span className="shop-product-price">
+            {formatPrice(getPrimaryPrice(product))}
+          </span>
         </div>
-        <h2>
-          <Link href={`/products/${product.slug}`}>{product.name}</Link>
-        </h2>
+        <div className="shop-product-meta-row flex! space-between">
+          <p>{product.categories?.[0]?.category.name ?? "Skincare"}</p>
+          {shouldShowRating ? (
+            <NumericRating count={reviewCount} rating={averageRating} />
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -308,7 +317,7 @@ export function CustomerShop() {
     useState<customerApi.CustomerShopProductsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [openFilterSections, setOpenFilterSections] = useState(
     () => new Set<string>(),
   );
@@ -482,15 +491,6 @@ export function CustomerShop() {
 
   const filterMarkup = (
     <form className="shop-filters">
-      <div className="shop-filter-heading">
-        <h2>Filters</h2>
-        {activeFilterCount ? (
-          <button type="button" onClick={clearFilters}>
-            Clear
-          </button>
-        ) : null}
-      </div>
-
       {filterSections.map((section) => {
         const options = filters[section.source];
         const values = selected[section.id];
@@ -607,6 +607,15 @@ export function CustomerShop() {
       <section className="shop-toolbar">
         <div className="shop-result-count">
           <span>{pagination?.totalItems ?? 0} products</span>
+          <button
+            className="shop-filter-drawer-button"
+            type="button"
+            onClick={() => setIsFiltersOpen(true)}
+          >
+            <FilterIcon />
+            Filters
+            {activeFilterCount ? <span>({activeFilterCount})</span> : null}
+          </button>
         </div>
         <div className="shop-toolbar-actions">
           <label>
@@ -624,25 +633,47 @@ export function CustomerShop() {
               ))}
             </select>
           </label>
-          <button
-            className="shop-mobile-filter-button"
-            type="button"
-            onClick={() => setIsMobileFiltersOpen((current) => !current)}
-          >
-            Filters
-            {activeFilterCount ? <span>({activeFilterCount})</span> : null}
-          </button>
         </div>
       </section>
 
-      {isMobileFiltersOpen ? (
-        <div className="shop-mobile-filters">{filterMarkup}</div>
+      {isFiltersOpen ? (
+        <div
+          className="shop-filter-backdrop"
+          role="presentation"
+          onClick={() => setIsFiltersOpen(false)}
+        />
+      ) : null}
+      {isFiltersOpen ? (
+        <aside
+          className="shop-filter-drawer open"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Product filters"
+        >
+          <div className="shop-filter-drawer-header">
+            <h2>Filters</h2>
+            <div>
+              {activeFilterCount ? (
+                <button type="button" onClick={clearFilters}>
+                  Clear
+                </button>
+              ) : null}
+              <button
+                type="button"
+                aria-label="Close filters"
+                onClick={() => setIsFiltersOpen(false)}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+          </div>
+          {filterMarkup}
+        </aside>
       ) : null}
 
       <div className="shop-divider" />
 
       <section className="shop-layout">
-        <aside className="shop-desktop-filters">{filterMarkup}</aside>
         <div className="shop-results">
           {loadError ? <p className="form-error">{loadError}</p> : null}
 

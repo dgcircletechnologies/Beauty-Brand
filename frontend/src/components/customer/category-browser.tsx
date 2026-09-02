@@ -47,7 +47,11 @@ function CategoryCard({
       )}
       <div>
         <strong>{category.name}</strong>
-        {category.description ? <p className="category-description"> {category.description} </p> : null}
+        {category.description ? (
+          <p className="category-description text-[18px]! ">
+            {category.description}
+          </p>
+        ) : null}
       </div>
     </Link>
   );
@@ -147,7 +151,7 @@ export function HomeCategorySection() {
               <ButtonArrowIcon />
             </span>
           </Link>
-          <div className="home-carousel-buttons" aria-label="Category carousel">
+          <div className="home-carousel-buttons relative left-[2vw]" aria-label="Category carousel">
             <button
               aria-label="Previous categories"
               type="button"
