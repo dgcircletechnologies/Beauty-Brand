@@ -56,4 +56,8 @@ export class PublicProductQueryDto {
   @IsOptional()
   @IsString()
   excludeProductId?: string;
+
+  @IsOptional()
+  @IsString()
+  offersOnly?: string;
 }

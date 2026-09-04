@@ -80,11 +80,11 @@ export class CustomerAccountController {
 
   @Post('sessions')
   @ResponseMessage('Account sessions fetched successfully')
-  getSessions(
-    @Req() request: AuthenticatedRequest,
-    @Body() dto: { refreshToken?: string },
-  ) {
-    return this.accountService.getSessions(request.user.id, dto.refreshToken);
+  getSessions(@Req() request: AuthenticatedRequest) {
+    return this.accountService.getSessions(
+      request.user.id,
+      this.extractCookieValue(request, 'refreshToken'),
+    );
   }
 
   @Delete('sessions/:sessionId')
@@ -94,5 +94,25 @@ export class CustomerAccountController {
     @Param('sessionId') sessionId: string,
   ) {
     return this.accountService.revokeSession(request.user.id, sessionId);
+  }
+
+  private extractCookieValue(
+    request: AuthenticatedRequest,
+    name: string,
+  ): string | undefined {
+    const cookieHeader = request.headers.cookie;
+
+    if (!cookieHeader) {
+      return undefined;
+    }
+
+    const cookie = cookieHeader
+      .split(';')
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${name}=`));
+
+    return cookie
+      ? decodeURIComponent(cookie.slice(name.length + 1))
+      : undefined;
   }
 }

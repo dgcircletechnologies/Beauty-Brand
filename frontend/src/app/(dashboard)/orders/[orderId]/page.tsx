@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import { OfferBadge } from "@/components/customer/offer-badge";
 import { UserShell } from "@/components/customer/user-shell";
 import { useAuth } from "@/contexts/auth-context";
-import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
 
 const fulfillmentSteps = [
@@ -138,6 +138,25 @@ function getAddress(
   return order.addresses.find((address) => address.type === type) ?? null;
 }
 
+function formatOrderMoney(
+  amount: number | string,
+  currency: customerApi.CustomerOrder["displayCurrency"],
+) {
+  const value = Number(amount);
+
+  if (!Number.isFinite(value)) {
+    return `${currency.symbol ?? currency.code}0`;
+  }
+
+  return `${currency.symbol ?? currency.code}${value.toFixed(
+    currency.decimalDigits,
+  )}`;
+}
+
+function isPositiveAmount(value: number | string | null | undefined) {
+  return Number(value) > 0;
+}
+
 function AddressBlock({
   address,
   title,
@@ -173,7 +192,6 @@ function AddressBlock({
 export default function OrderDetailPage() {
   const params = useParams<{ orderId: string }>();
   const { accessToken } = useAuth();
-  const { formatPrice } = useCurrency();
   const [order, setOrder] = useState<customerApi.CustomerOrder | null>(null);
   const [isCancellationOpen, setIsCancellationOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -477,12 +495,63 @@ export default function OrderDetailPage() {
                 <p>
                   {item.variantLabel ?? item.sku} - Qty {item.quantity}
                 </p>
-                <strong>{formatPrice(item.displayLineTotal)}</strong>
+                {item.isOfferReward ? (
+                  <span className="offer-badge">Offer Reward</span>
+                ) : item.offer ? (
+                  <OfferBadge offer={item.offer} />
+                ) : null}
+                {item.offer ? (
+                  <small className="order-offer-name">{item.offer.name}</small>
+                ) : null}
+                <strong>
+                  {item.isOfferReward
+                    ? "Free"
+                    : formatOrderMoney(item.displayLineTotal, order.displayCurrency)}
+                </strong>
               </div>
               <dl>
                 <div>
-                  <dt>Unit price</dt>
-                  <dd>{formatPrice(item.displayUnitPrice)}</dd>
+                  <dt>Original price</dt>
+                  <dd>
+                    {formatOrderMoney(
+                      item.displayBaseUnitPrice ?? item.displayUnitPrice,
+                      order.displayCurrency,
+                    )}{" "}
+                    each
+                  </dd>
+                </div>
+                <div>
+                  <dt>Paid price</dt>
+                  <dd>
+                    {item.isOfferReward
+                      ? "Free"
+                      : `${formatOrderMoney(
+                          item.displayUnitPrice,
+                          order.displayCurrency,
+                        )} each`}
+                  </dd>
+                </div>
+                {isPositiveAmount(item.discountAmount) ? (
+                  <div>
+                    <dt>Saved</dt>
+                    <dd>
+                      {formatOrderMoney(
+                        item.displayLineDiscountAmount ?? item.discountAmount ?? 0,
+                        order.displayCurrency,
+                      )}
+                    </dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt>Line total</dt>
+                  <dd>
+                    {item.isOfferReward
+                      ? "Free"
+                      : formatOrderMoney(
+                          item.displayLineTotal,
+                          order.displayCurrency,
+                        )}
+                  </dd>
                 </div>
                 <div>
                   <dt>SKU</dt>
@@ -511,23 +580,56 @@ export default function OrderDetailPage() {
             <div className="summary-lines">
               <span>
                 <small>Subtotal</small>
-                <strong>{formatPrice(order.displaySubtotal)}</strong>
+                <strong>
+                  {formatOrderMoney(order.displaySubtotal, order.displayCurrency)}
+                </strong>
               </span>
+              {isPositiveAmount(order.displayDiscountAmount) ? (
+                <span>
+                  <small>Offer Savings</small>
+                  <strong>
+                    -
+                    {formatOrderMoney(
+                      order.displayDiscountAmount,
+                      order.displayCurrency,
+                    )}
+                  </strong>
+                </span>
+              ) : null}
+              {isPositiveAmount(order.displayRewardSavings) ? (
+                <span>
+                  <small>Reward Savings</small>
+                  <strong>
+                    -
+                    {formatOrderMoney(
+                      order.displayRewardSavings ?? 0,
+                      order.displayCurrency,
+                    )}
+                  </strong>
+                </span>
+              ) : null}
               <span>
                 <small>Shipping</small>
-                <strong>{formatPrice(order.displayShippingAmount)}</strong>
+                <strong>
+                  {formatOrderMoney(
+                    order.displayShippingAmount,
+                    order.displayCurrency,
+                  )}
+                </strong>
               </span>
-              <span>
+              {isPositiveAmount(order.displayTaxAmount) ? (
+                <span>
                 <small>Tax</small>
-                <strong>{formatPrice(order.displayTaxAmount)}</strong>
+                <strong>
+                  {formatOrderMoney(order.displayTaxAmount, order.displayCurrency)}
+                </strong>
               </span>
-              <span>
-                <small>Discount</small>
-                <strong>{formatPrice(order.displayDiscountAmount)}</strong>
-              </span>
+              ) : null}
               <span>
                 <small>Total</small>
-                <strong>{formatPrice(order.displayTotalAmount)}</strong>
+                <strong>
+                  {formatOrderMoney(order.displayTotalAmount, order.displayCurrency)}
+                </strong>
               </span>
             </div>
           </section>

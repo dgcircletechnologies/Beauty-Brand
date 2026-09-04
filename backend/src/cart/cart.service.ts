@@ -288,6 +288,22 @@ export class CartService {
         unitFinalPrice.mul(exchangeRateDecimal),
         cart.currency.decimalDigits,
       );
+      const displayUnitBasePrice = this.decimalToRoundedNumber(
+        unitBasePrice.mul(exchangeRateDecimal),
+        cart.currency.decimalDigits,
+      );
+      const displayUnitDiscountAmount = this.decimalToRoundedNumber(
+        unitDiscountAmount.mul(exchangeRateDecimal),
+        cart.currency.decimalDigits,
+      );
+      const displayLineBaseSubtotal = this.decimalToRoundedNumber(
+        lineBaseSubtotal.mul(exchangeRateDecimal),
+        cart.currency.decimalDigits,
+      );
+      const displayLineDiscountAmount = this.decimalToRoundedNumber(
+        lineDiscountAmount.mul(exchangeRateDecimal),
+        cart.currency.decimalDigits,
+      );
       const displayLineTotal = this.decimalToRoundedNumber(
         lineFinalSubtotal.mul(exchangeRateDecimal),
         cart.currency.decimalDigits,
@@ -316,7 +332,11 @@ export class CartService {
           lineFinalSubtotal,
           baseCurrency.decimalDigits,
         ),
+        displayUnitBasePrice,
+        displayUnitDiscountAmount,
         displayUnitPrice,
+        displayLineBaseSubtotal,
+        displayLineDiscountAmount,
         displayLineTotal,
         pricing: {
           unitBasePrice: this.decimalToMoney(unitBasePrice),
@@ -399,6 +419,24 @@ export class CartService {
         discountTotal: this.decimalToMoney(discountTotal),
         finalSubtotal: this.decimalToMoney(baseSubtotal),
         rewardSavings: this.decimalToMoney(rewardSavings),
+        displayBaseSubtotal: this.decimalToMoney(
+          this.roundDecimal(
+            basePreDiscountSubtotal.mul(exchangeRateDecimal),
+            cart.currency.decimalDigits,
+          ),
+        ),
+        displayDiscountTotal: this.decimalToMoney(
+          this.roundDecimal(
+            discountTotal.mul(exchangeRateDecimal),
+            cart.currency.decimalDigits,
+          ),
+        ),
+        displayRewardSavings: this.decimalToMoney(
+          this.roundDecimal(
+            rewardSavings.mul(exchangeRateDecimal),
+            cart.currency.decimalDigits,
+          ),
+        ),
         displayFinalSubtotal: this.decimalToMoney(
           this.roundDecimal(
             baseSubtotal.mul(exchangeRateDecimal),

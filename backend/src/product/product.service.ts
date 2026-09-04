@@ -63,6 +63,9 @@ type RatingReview = {
 type PublicVariantWithPrice = {
   id: string;
   price: unknown;
+  pricing?:
+    | ReturnType<typeof mapResolvedPricing>
+    | ReturnType<typeof mapNoOfferPricing>;
 };
 
 @Injectable()
@@ -137,6 +140,10 @@ export class ProductService {
     const page = this.getPositiveInteger(query.page, 1);
     const pageSize = Math.min(this.getPositiveInteger(query.pageSize, 12), 48);
     const selectedFilters = this.getPublicProductFilters(query);
+    const shouldShowOffersOnly = this.parseBoolean(query.offersOnly);
+    const sort = query.sort ?? 'offers-first';
+    const needsOfferPricingBeforePagination =
+      shouldShowOffersOnly || sort === 'offers-first';
     const products = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
@@ -223,10 +230,15 @@ export class ProductService {
     const productsWithRatings = products.map((product) =>
       this.withReviewSummary(product),
     );
-    const sortedProducts = this.sortPublicProducts(
-      productsWithRatings,
-      query.sort,
-    );
+    const productsReadyForSorting = needsOfferPricingBeforePagination
+      ? await this.withPublicVariantPricing(productsWithRatings)
+      : productsWithRatings;
+    const offerFilteredProducts = shouldShowOffersOnly
+      ? productsReadyForSorting.filter((product) =>
+          this.hasProductOffer(product),
+        )
+      : productsReadyForSorting;
+    const sortedProducts = this.sortPublicProducts(offerFilteredProducts, sort);
     const totalItems = sortedProducts.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const safePage = Math.min(page, totalPages);
@@ -238,8 +250,9 @@ export class ProductService {
       paginatedProducts.map((product) => product.id),
     );
 
-    const pricedProducts =
-      await this.withPublicVariantPricing(paginatedProducts);
+    const pricedProducts = needsOfferPricingBeforePagination
+      ? paginatedProducts
+      : await this.withPublicVariantPricing(paginatedProducts);
 
     return {
       items: pricedProducts.map((product) => ({
@@ -300,23 +313,38 @@ export class ProductService {
     const pricingByVariantId =
       await this.offerResolverService.resolveForVariants(variantIds);
 
-    return products.map((product) => ({
-      ...product,
-      variants: (product.variants ?? []).map((variant) => {
-        const resolvedPricing = pricingByVariantId.get(variant.id);
-        const publicVariant = { ...variant } as PublicVariantWithPrice & {
-          compareAtPrice?: unknown;
-        };
-        delete publicVariant.compareAtPrice;
+    return products
+      .map((product) => ({
+        ...product,
+        variants: (product.variants ?? []).map((variant) => {
+          const resolvedPricing = pricingByVariantId.get(variant.id);
+          const publicVariant = { ...variant } as PublicVariantWithPrice & {
+            compareAtPrice?: unknown;
+          };
+          delete publicVariant.compareAtPrice;
+
+          return {
+            ...publicVariant,
+            pricing: resolvedPricing
+              ? mapResolvedPricing(resolvedPricing)
+              : mapNoOfferPricing(variant.price as string | number),
+          };
+        }),
+      }))
+      .map((product) => {
+        const displayVariant =
+          product.variants.find((variant) => variant.pricing?.hasOffer) ??
+          product.variants[0] ??
+          null;
 
         return {
-          ...publicVariant,
-          pricing: resolvedPricing
-            ? mapResolvedPricing(resolvedPricing)
-            : mapNoOfferPricing(variant.price as string | number),
+          ...product,
+          hasOffer: Boolean(displayVariant?.pricing?.hasOffer),
+          effectiveOffer: displayVariant?.pricing?.offer ?? null,
+          displayPrice: displayVariant?.price ?? null,
+          displayPricing: displayVariant?.pricing ?? null,
         };
-      }),
-    }));
+      });
   }
 
   private getPublicProductFilters(query: PublicProductQueryDto) {
@@ -520,16 +548,23 @@ export class ProductService {
 
   private sortPublicProducts<
     T extends {
-      variants?: { price: unknown }[];
+      variants?: PublicVariantWithPrice[];
       isFeatured: boolean;
       publishedAt: Date | null;
       createdAt: Date;
       averageRating: unknown;
     },
-  >(products: T[], sort = 'featured') {
+  >(products: T[], sort = 'offers-first') {
     const priceOf = (product: T) => Number(product.variants?.[0]?.price ?? 0);
 
     return [...products].sort((first, second) => {
+      if (sort === 'offers-first') {
+        return (
+          Number(this.hasProductOffer(second)) -
+          Number(this.hasProductOffer(first))
+        );
+      }
+
       if (sort === 'price-asc') {
         return priceOf(first) - priceOf(second);
       }
@@ -551,6 +586,14 @@ export class ProductService {
 
       return Number(second.isFeatured) - Number(first.isFeatured);
     });
+  }
+
+  private hasProductOffer(product: { variants?: unknown[] }) {
+    return (
+      (product.variants as PublicVariantWithPrice[] | undefined)?.some(
+        (variant) => variant.pricing?.hasOffer,
+      ) ?? false
+    );
   }
 
   private async getPublicShopFilters() {
@@ -691,6 +734,10 @@ export class ProductService {
     const parsed = Number(value);
 
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+
+  private parseBoolean(value: string | undefined) {
+    return ['1', 'true', 'yes'].includes((value ?? '').trim().toLowerCase());
   }
 
   private parseList(value: string | undefined) {

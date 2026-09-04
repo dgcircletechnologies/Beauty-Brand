@@ -159,6 +159,8 @@ export class AccountService {
   }
 
   async getSessions(userId: string, currentRefreshToken?: string) {
+    await this.deleteStaleRefreshTokens();
+
     const currentTokenHash = currentRefreshToken
       ? this.hashRefreshToken(currentRefreshToken)
       : null;
@@ -167,40 +169,86 @@ export class AccountService {
         userId,
       },
       orderBy: {
-        createdAt: 'desc',
+        lastUsedAt: 'desc',
       },
     });
     const now = new Date();
+    const inactiveHistoryDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const sessionGroups = new Map<string, typeof sessions>();
+
+    for (const session of sessions) {
+      const group = sessionGroups.get(session.sessionId) ?? [];
+      group.push(session);
+      sessionGroups.set(session.sessionId, group);
+    }
+
+    const sessionSummaries = [...sessionGroups.entries()]
+      .map(([sessionId, tokens]) => {
+        const latestToken = tokens.reduce((latest, token) => {
+          const latestDate = latest.lastUsedAt ?? latest.createdAt;
+          const tokenDate = token.lastUsedAt ?? token.createdAt;
+
+          return tokenDate > latestDate ? token : latest;
+        });
+        const activeToken = tokens.find(
+          (token) =>
+            !token.revokedAt &&
+            !token.replacedAt &&
+            !token.reusedAt &&
+            token.expiresAt > now,
+        );
+
+        return {
+          id: sessionId,
+          ipAddress: latestToken.ipAddress,
+          userAgent: latestToken.userAgent,
+          deviceLabel: latestToken.deviceLabel,
+          location: latestToken.location,
+          lastUsedAt: latestToken.lastUsedAt,
+          createdAt: tokens.reduce(
+            (createdAt, token) =>
+              token.createdAt < createdAt ? token.createdAt : createdAt,
+            latestToken.createdAt,
+          ),
+          expiresAt: activeToken?.expiresAt ?? latestToken.expiresAt,
+          revokedAt: activeToken ? null : latestToken.revokedAt,
+          isCurrent: tokens.some(
+            (token) => currentTokenHash === token.tokenHash,
+          ),
+          isActive: Boolean(activeToken),
+        };
+      })
+      .filter(
+        (session) =>
+          session.isActive ||
+          (session.lastUsedAt ?? session.createdAt) > inactiveHistoryDate,
+      );
 
     return {
-      activeSessionCount: sessions.filter(
-        (session) => !session.revokedAt && session.expiresAt > now,
-      ).length,
-      sessions: sessions.map((session) => ({
-        id: session.id,
-        ipAddress: session.ipAddress,
-        userAgent: session.userAgent,
-        deviceLabel: session.deviceLabel,
-        location: session.location,
-        lastUsedAt: session.lastUsedAt,
-        createdAt: session.createdAt,
-        expiresAt: session.expiresAt,
-        revokedAt: session.revokedAt,
-        isCurrent: currentTokenHash === session.tokenHash,
-        isActive: !session.revokedAt && session.expiresAt > now,
-      })),
+      activeSessionCount: sessionSummaries.filter((session) => session.isActive)
+        .length,
+      sessions: sessionSummaries.sort((left, right) => {
+        const leftDate = left.lastUsedAt ?? left.createdAt;
+        const rightDate = right.lastUsedAt ?? right.createdAt;
+
+        return rightDate.getTime() - leftDate.getTime();
+      }),
     };
   }
 
   async revokeSession(userId: string, sessionId: string) {
-    const result = await this.prisma.refreshToken.deleteMany({
+    const result = await this.prisma.refreshToken.updateMany({
       where: {
-        id: sessionId,
+        sessionId,
         userId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
       },
     });
 
-    if (result.count !== 1) {
+    if (result.count < 1) {
       throw new BadRequestException('Session not found');
     }
 
@@ -305,5 +353,31 @@ export class AccountService {
       this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
 
     return createHmac('sha256', secret).update(token).digest('hex');
+  }
+
+  private async deleteStaleRefreshTokens() {
+    const retentionDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.refreshToken.deleteMany({
+      where: {
+        OR: [
+          {
+            expiresAt: {
+              lt: retentionDate,
+            },
+          },
+          {
+            revokedAt: {
+              lt: retentionDate,
+            },
+          },
+          {
+            replacedAt: {
+              lt: retentionDate,
+            },
+          },
+        ],
+      },
+    });
   }
 }

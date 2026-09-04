@@ -7,6 +7,8 @@ import type {
   SignupPayload,
 } from "../auth/types";
 
+let refreshPromise: Promise<AuthSession> | null = null;
+
 export function login(payload: LoginPayload) {
   return apiRequest<AuthSession>("/auth/login", {
     method: "POST",
@@ -49,38 +51,26 @@ export function resetPassword(payload: ResetPasswordPayload) {
   });
 }
 
-export function refreshToken(refreshTokenValue: string) {
-  return apiRequest<Pick<AuthSession, "accessToken" | "refreshToken">>(
-    "/auth/refresh",
-    {
+export function refreshToken() {
+  if (!refreshPromise) {
+    refreshPromise = apiRequest<AuthSession>("/auth/refresh", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${refreshTokenValue}`,
-      },
-      body: JSON.stringify({
-        refreshToken: refreshTokenValue,
-      }),
-    },
-  );
+    }).finally(() => {
+      refreshPromise = null;
+    });
+  }
+
+  return refreshPromise;
 }
 
-export function logout(refreshTokenValue: string, accessToken: string) {
+export function logout() {
   return apiRequest<unknown>("/auth/logout", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      refreshToken: refreshTokenValue,
-    }),
   });
 }
 
-export function logoutAll(accessToken: string) {
+export function logoutAll() {
   return apiRequest<unknown>("/auth/logout-all", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
   });
 }

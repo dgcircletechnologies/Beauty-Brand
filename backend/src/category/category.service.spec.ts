@@ -296,8 +296,15 @@ describe('CategoryService', () => {
 
     category.findMany.mockResolvedValue(expectedCategories);
 
-    await expect(service.findPublicCategories()).resolves.toBe(
-      expectedCategories,
+    await expect(service.findPublicCategories()).resolves.toEqual(
+      expectedCategories.map((category) => ({
+        ...category,
+        offer: {
+          hasOffer: false,
+          offer: null,
+          buyXGetY: null,
+        },
+      })),
     );
 
     expect(category.findMany).toHaveBeenCalledWith({
@@ -317,6 +324,9 @@ describe('CategoryService', () => {
         name: 'asc',
       },
     });
+    expect(offerResolver.resolveForCategory).toHaveBeenCalledTimes(2);
+    expect(offerResolver.resolveForCategory).toHaveBeenCalledWith('child_1');
+    expect(offerResolver.resolveForCategory).toHaveBeenCalledWith('root_1');
   });
 
   it('fetches published products for a category and descendants', async () => {

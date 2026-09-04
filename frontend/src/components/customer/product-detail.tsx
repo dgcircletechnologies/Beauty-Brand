@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { OfferBadge } from "@/components/customer/offer-badge";
+import { OfferPrice } from "@/components/customer/offer-price";
 import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
+import { getOfferDisplayLabel } from "@/lib/offers/format";
+import type { EffectiveOffer, ResolvedOfferPricing } from "@/lib/offers/types";
 
 const detailTabs = ["About", "Reviews", "Benefits", "Other Details"] as const;
 type DetailTab = (typeof detailTabs)[number];
@@ -39,7 +43,11 @@ function isVariantSizeAttribute(value: customerApi.CustomerProductAttributeValue
 }
 
 function getPrimaryPrice(product: customerApi.CustomerProduct) {
-  return product.variants?.[0]?.price ?? "0";
+  return product.displayPrice ?? product.variants?.[0]?.price ?? "0";
+}
+
+function getDisplayPricing(product: customerApi.CustomerProduct) {
+  return product.displayPricing ?? product.variants?.[0]?.pricing ?? null;
 }
 
 function getVariantSizeLabel(variant: customerApi.CustomerProductVariant) {
@@ -85,6 +93,41 @@ function getReviewUserName(review: customerApi.CustomerProductReview) {
   }
 
   return [review.user.firstName, review.user.lastName].filter(Boolean).join(" ");
+}
+
+function getProductDetailOfferMessage(
+  offer: EffectiveOffer,
+  pricing: ResolvedOfferPricing | null,
+  formatPrice: (amount: string | number) => string,
+) {
+  if (offer.type === "FIXED_AMOUNT" && offer.value) {
+    return `Save ${formatPrice(offer.value)} on this item`;
+  }
+
+  if (offer.type === "BUY_X_GET_Y") {
+    const buyQuantity = pricing?.buyXGetY?.buyQuantity ?? offer.buyXGetY?.buyQuantity;
+    const getQuantity = pricing?.buyXGetY?.getQuantity ?? offer.buyXGetY?.getQuantity;
+
+    if (buyQuantity && getQuantity) {
+      return `Buy ${buyQuantity} and get ${getQuantity} free`;
+    }
+  }
+
+  return getOfferDisplayLabel(
+    {
+      ...offer,
+      buyXGetY: offer.buyXGetY ?? pricing?.buyXGetY ?? null,
+    },
+    formatPrice,
+  ) ?? "Offer available";
+}
+
+function formatOfferEndDate(endAt: string) {
+  return `Valid until ${new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(endAt))}`;
 }
 
 function ProductDetailSvgIcon({ icon }: { icon: ProductDetailIcon }) {
@@ -176,16 +219,12 @@ function RatingStars({
   );
 }
 
-function ProductCard({
-  product,
-  formatPrice,
-}: {
-  product: customerApi.CustomerProduct;
-  formatPrice: (amount: string | number) => string;
-}) {
+function ProductCard({ product }: { product: customerApi.CustomerProduct }) {
   const image = product.images?.[0];
   const averageRating = useMemo(() => getDisplayRating(product), [product]);
   const reviewCount = product.reviewCount ?? product.reviews?.length ?? 0;
+  const displayPricing = getDisplayPricing(product);
+  const offer = product.effectiveOffer ?? displayPricing?.offer ?? null;
 
   return (
     <article className="shop-product-card">
@@ -195,6 +234,19 @@ function ProductCard({
         ) : (
           <div className="shop-product-image-placeholder" />
         )}
+        {product.hasOffer || displayPricing?.hasOffer ? (
+          offer ? (
+            <OfferBadge
+              className="product-card-offer-badge"
+              offer={offer}
+              buyXGetY={displayPricing?.buyXGetY}
+            />
+          ) : (
+            <span className="offer-badge product-card-offer-badge">
+              Offer Available
+            </span>
+          )
+        ) : null}
       </Link>
       <div>
         <p>{product.categories?.[0]?.category.name ?? "Skincare"}</p>
@@ -202,7 +254,9 @@ function ProductCard({
           <Link href={`/products/${product.slug}`}>{product.name}</Link>
         </h2>
         <RatingStars count={reviewCount} rating={averageRating} />
-        <span>{formatPrice(getPrimaryPrice(product))}</span>
+        <span>
+          <OfferPrice price={getPrimaryPrice(product)} pricing={displayPricing} />
+        </span>
       </div>
     </article>
   );
@@ -729,6 +783,8 @@ export function ProductDetail({ slug }: { slug: string }) {
   const stockQuantity = selectedVariant?.stockQuantity ?? 0;
   const isAvailable = Boolean(selectedVariant?.isActive && stockQuantity > 0);
   const compareAtPrice = selectedVariant?.compareAtPrice;
+  const selectedPricing = selectedVariant?.pricing ?? null;
+  const selectedOffer = selectedPricing?.offer ?? null;
   const productAttributes = product.attributeValues ?? [];
   const variantAttributes = selectedVariant?.attributeValues ?? [];
   const selectedVariantDetails = variantAttributes.filter(
@@ -790,8 +846,21 @@ export function ProductDetail({ slug }: { slug: string }) {
                 {product.tags[0].tag.name}
               </span>
             ) : null}
-            <strong>{formatPrice(selectedVariant?.price ?? "0")}</strong>
-            {compareAtPrice ? <span>{formatPrice(compareAtPrice)}</span> : null}
+            {selectedOffer ? (
+              <OfferBadge
+                offer={selectedOffer}
+                buyXGetY={selectedPricing?.buyXGetY}
+              />
+            ) : null}
+            <strong>
+              <OfferPrice
+                price={selectedVariant?.price ?? "0"}
+                pricing={selectedPricing}
+              />
+            </strong>
+            {compareAtPrice && !selectedOffer ? (
+              <span>{formatPrice(compareAtPrice)}</span>
+            ) : null}
             <button
               className="product-rating-summary-button"
               type="button"
@@ -808,6 +877,24 @@ export function ProductDetail({ slug }: { slug: string }) {
             </button>
           </div>
           <p>{product.shortDescription || "Skincare product"}</p>
+
+          {selectedOffer ? (
+            <section className="product-offer-panel" aria-label="Special offer">
+              <p className="eyebrow">Special Offer</p>
+              <h2>{selectedOffer.name}</h2>
+              <strong>
+                {getProductDetailOfferMessage(selectedOffer, selectedPricing, formatPrice)}
+              </strong>
+              {selectedOffer.endAt ? (
+                <small>{formatOfferEndDate(selectedOffer.endAt)}</small>
+              ) : null}
+              {selectedPricing?.buyXGetY?.buyQuantity ? (
+                <small>
+                  Add {selectedPricing.buyXGetY.buyQuantity} to qualify. Cart will verify final eligibility.
+                </small>
+              ) : null}
+            </section>
+          ) : null}
 
           {product.variants?.length ? (
             <section className="product-template-options">
@@ -834,12 +921,20 @@ export function ProductDetail({ slug }: { slug: string }) {
                       }}
                     >
                       <span>{sizeLabel}</span>
-                      <strong>{formatPrice(variant.price)}</strong>
+                      <strong>
+                        <OfferPrice price={variant.price} pricing={variant.pricing} />
+                      </strong>
                       <small>
                         {variantAvailable
                           ? `${variantSubtitle} · ${variant.stockQuantity} in stock`
                           : "Out of stock"}
                       </small>
+                      {variant.pricing?.offer ? (
+                        <OfferBadge
+                          offer={variant.pricing.offer}
+                          buyXGetY={variant.pricing.buyXGetY}
+                        />
+                      ) : null}
                     </button>
                   );
                 })}
@@ -1220,7 +1315,6 @@ export function ProductDetail({ slug }: { slug: string }) {
               <div className="shop-product-grid">
                 {relatedProducts.map((relatedProduct) => (
                   <ProductCard
-                    formatPrice={formatPrice}
                     key={relatedProduct.id}
                     product={relatedProduct}
                   />

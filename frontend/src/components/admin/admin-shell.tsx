@@ -154,9 +154,21 @@ const currencyLinks = [
   },
 ];
 
+const offerLinks = [
+  {
+    href: "/admin/offers",
+    label: "View Offers",
+  },
+  {
+    href: "/admin/offers/create",
+    label: "Create Offer",
+  },
+];
+
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { logout, user } = useAuth();
+  const currentOfferId = getCurrentOfferId(pathname);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProductsOpen, setIsProductsOpen] = useState(
     pathname.startsWith("/admin/products"),
@@ -182,6 +194,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [isShippingOpen, setIsShippingOpen] = useState(
     pathname.startsWith("/admin/shipping"),
   );
+  const [isOffersOpen, setIsOffersOpen] = useState(
+    pathname.startsWith("/admin/offers"),
+  );
   const isProductsActive = pathname.startsWith("/admin/products");
   const isCategoriesActive = pathname.startsWith("/admin/categories");
   const isAttributesActive = pathname.startsWith("/admin/attributes");
@@ -190,6 +205,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const isMetadataActive = pathname.startsWith("/admin/product-metadata");
   const isOrdersActive = pathname.startsWith("/admin/orders");
   const isPaymentsActive = pathname.startsWith("/admin/payments");
+  const isOffersActive = pathname.startsWith("/admin/offers");
 
   return (
     <div
@@ -384,6 +400,62 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </div>
 
+          <div className={`nav-group ${isOffersActive ? "active" : ""}`}>
+            <div className="nav-group-row">
+              <Link
+                aria-current={pathname === "/admin/offers" ? "page" : undefined}
+                className={isOffersActive ? "active nav-link" : "nav-link"}
+                href="/admin/offers"
+              >
+                <TagIcon />
+                <span>Offers</span>
+              </Link>
+              <button
+                aria-expanded={isOffersOpen}
+                aria-label="Toggle offer options"
+                className="icon-button nav-options-button"
+                type="button"
+                onClick={() => {
+                  setIsOffersOpen((current) => !current);
+                  setIsSidebarCollapsed(false);
+                }}
+              >
+                <ChevronIcon />
+              </button>
+            </div>
+            {isOffersOpen && !isSidebarCollapsed ? (
+              <div className="nav-submenu">
+                {offerLinks.map((link) => (
+                  <Link
+                    aria-current={pathname === link.href ? "page" : undefined}
+                    className={pathname === link.href ? "active" : undefined}
+                    href={link.href}
+                    key={link.href}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+                {currentOfferId ? (
+                  <Link
+                    aria-current={
+                      pathname === `/admin/offers/${currentOfferId}/targets`
+                        ? "page"
+                        : undefined
+                    }
+                    className={
+                      pathname === `/admin/offers/${currentOfferId}/targets`
+                        ? "active"
+                        : undefined
+                    }
+                    href={`/admin/offers/${currentOfferId}/targets`}
+                  >
+                    Manage Targets
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
           <div className={`nav-group ${isCategoriesActive ? "active" : ""}`}>
             <div className="nav-group-row">
               <Link
@@ -560,6 +632,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function getCurrentOfferId(pathname: string) {
+  const match = pathname.match(/^\/admin\/offers\/([^/]+)(?:\/|$)/);
+
+  if (!match || ["add", "create"].includes(match[1])) {
+    return null;
+  }
+
+  return match[1];
+}
+
 function PanelIcon() {
   return (
     <svg
@@ -733,6 +815,31 @@ function ShippingIcon() {
       />
       <path d="M7 18.5A1.5 1.5 0 1 0 7 15.5A1.5 1.5 0 0 0 7 18.5Z" />
       <path d="M17 18.5A1.5 1.5 0 1 0 17 15.5A1.5 1.5 0 0 0 17 18.5Z" />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path
+        d="M4.5 5.5V11.5L12.5 19.5C13.3 20.3 14.6 20.3 15.4 19.5L19.5 15.4C20.3 14.6 20.3 13.3 19.5 12.5L11.5 4.5H5.5C4.95 4.5 4.5 4.95 4.5 5.5Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M8.5 8.5H8.51"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="3"
+      />
     </svg>
   );
 }

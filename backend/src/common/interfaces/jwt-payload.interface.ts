@@ -10,5 +10,6 @@ export interface AccessTokenPayload extends JwtPayload {
 
 export interface RefreshTokenPayload {
   sub: string;
+  jti?: string;
   type: 'refresh';
 }

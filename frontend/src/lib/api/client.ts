@@ -25,6 +25,7 @@ export async function apiRequest<T>(
   const isFormData = options.body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
+    credentials: "include",
     headers: {
       ...(!isFormData && {
         "Content-Type": "application/json",
@@ -51,6 +52,7 @@ export async function apiRequest<T>(
 
         const retryResponse = await fetch(`${API_BASE_URL}${path}`, {
           ...options,
+          credentials: "include",
           headers: retryHeaders,
         });
         const retryPayload = (await retryResponse.json().catch(() => null)) as

@@ -23,6 +23,8 @@ function mapOffer(offer: OfferResolverResult['offer']) {
     type: offer.type,
     value: nullableDecimalToMoney(offer.value),
     maxDiscountAmount: nullableDecimalToMoney(offer.maxDiscountAmount),
+    startAt: offer.startAt?.toISOString() ?? null,
+    endAt: offer.endAt?.toISOString() ?? null,
   };
 }
 

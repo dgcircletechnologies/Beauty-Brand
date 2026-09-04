@@ -140,8 +140,8 @@ export class CategoryService {
     };
   }
 
-  findPublicCategories() {
-    return this.prisma.category.findMany({
+  async findPublicCategories() {
+    const categories = await this.prisma.category.findMany({
       where: {
         deletedAt: null,
         isActive: true,
@@ -170,6 +170,15 @@ export class CategoryService {
         name: 'asc',
       },
     });
+
+    return Promise.all(
+      categories.map(async (category) => ({
+        ...category,
+        offer: mapResolvedCategoryOffer(
+          await this.offerResolverService.resolveForCategory(category.id),
+        ),
+      })),
+    );
   }
 
   async findPublicBySlug(slug: string) {

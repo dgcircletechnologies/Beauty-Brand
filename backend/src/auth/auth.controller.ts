@@ -1,17 +1,10 @@
-import {
-  Body,
-  Controller,
-  Post,
-  Req,
-} from '@nestjs/common';
-import type { Request } from 'express';
+import { Body, Controller, Post, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { LogoutDto } from './dto/logout.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -20,9 +13,9 @@ import type { AuthenticatedRequest } from '../common/interfaces/authenticated-re
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-  ) {}
+  private readonly refreshCookieName = 'refreshToken';
+
+  constructor(private readonly authService: AuthService) {}
 
   @Post('register')
   @ResponseMessage('Account created successfully')
@@ -38,38 +31,48 @@ export class AuthController {
 
   @Post('resend-verification-email')
   @ResponseMessage('Verification email sent')
-  resendVerificationEmail(
-    @Body() dto: ResendVerificationEmailDto,
-  ) {
-    return this.authService.resendVerificationEmail(
-      dto,
-    );
+  resendVerificationEmail(@Body() dto: ResendVerificationEmailDto) {
+    return this.authService.resendVerificationEmail(dto);
   }
 
   @Post('login')
   @ResponseMessage('Login successful')
-  login(@Body() dto: LoginDto, @Req() request: Request) {
-    return this.authService.login(dto, request);
+  async login(
+    @Body() dto: LoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const session = await this.authService.login(dto, request);
+    this.setRefreshCookie(response, session.refreshToken);
+
+    return {
+      user: session.user,
+      accessToken: session.accessToken,
+    };
   }
 
   @Post('refresh')
   @ResponseMessage('Token refreshed successfully')
-  refresh(
+  async refresh(
     @Req() request: AuthenticatedRequest,
-    @Body() dto: RefreshTokenDto,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    return this.authService.refresh(
+    const session = await this.authService.refresh(
       request.user.id,
-      dto,
+      request.refreshToken ?? '',
       request,
     );
+    this.setRefreshCookie(response, session.refreshToken);
+
+    return {
+      user: session.user,
+      accessToken: session.accessToken,
+    };
   }
 
   @Post('forgot-password')
   @ResponseMessage('Password reset email sent')
-  forgotPassword(
-    @Body() dto: ForgotPasswordDto,
-  ) {
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
 
@@ -81,23 +84,65 @@ export class AuthController {
 
   @Post('logout')
   @ResponseMessage('Logged out successfully')
-  logout(
+  async logout(
     @Req() request: AuthenticatedRequest,
-    @Body() dto: LogoutDto,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    return this.authService.logout(
+    const result = await this.authService.logout(
       request.user.id,
-      dto,
+      request.refreshToken ?? '',
     );
+    this.clearRefreshCookie(response);
+
+    return result;
   }
 
   @Post('logout-all')
   @ResponseMessage('Logged out from all devices successfully')
-  logoutAll(
+  async logoutAll(
     @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    return this.authService.logoutAll(
-      request.user.id,
-    );
+    const result = await this.authService.logoutAll(request.user.id);
+    this.clearRefreshCookie(response);
+
+    return result;
+  }
+
+  private setRefreshCookie(response: Response, refreshToken: string) {
+    response.cookie(this.refreshCookieName, refreshToken, {
+      httpOnly: true,
+      secure: this.isSecureCookieEnabled(),
+      sameSite: this.getCookieSameSite(),
+      path: '/api/v1',
+      maxAge: this.getRefreshCookieMaxAge(),
+    });
+  }
+
+  private clearRefreshCookie(response: Response) {
+    response.clearCookie(this.refreshCookieName, {
+      httpOnly: true,
+      secure: this.isSecureCookieEnabled(),
+      sameSite: this.getCookieSameSite(),
+      path: '/api/v1',
+    });
+  }
+
+  private isSecureCookieEnabled() {
+    return process.env.AUTH_COOKIE_SECURE
+      ? process.env.AUTH_COOKIE_SECURE === 'true'
+      : process.env.NODE_ENV === 'production';
+  }
+
+  private getRefreshCookieMaxAge() {
+    const seconds = Number(process.env.JWT_REFRESH_EXPIRES_IN_SECONDS);
+
+    return (Number.isFinite(seconds) && seconds > 0 ? seconds : 604800) * 1000;
+  }
+
+  private getCookieSameSite(): 'lax' | 'strict' | 'none' {
+    const sameSite = process.env.AUTH_COOKIE_SAME_SITE?.toLowerCase();
+
+    return sameSite === 'strict' || sameSite === 'none' ? sameSite : 'lax';
   }
 }

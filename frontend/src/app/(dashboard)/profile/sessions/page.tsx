@@ -13,7 +13,6 @@ export default function ProfileSessionsPage() {
     isBootstrapping,
     logout,
     logoutAll,
-    refreshToken,
     user,
   } = useAuth();
   const [sessions, setSessions] = useState<customerApi.AccountSessions | null>(
@@ -26,7 +25,7 @@ export default function ProfileSessionsPage() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!accessToken || !refreshToken) {
+    if (!accessToken) {
       if (!isBootstrapping) {
         queueMicrotask(() => {
           if (isMounted) {
@@ -41,7 +40,6 @@ export default function ProfileSessionsPage() {
     }
 
     const tokenSnapshot = accessToken;
-    const refreshTokenSnapshot = refreshToken;
 
     async function loadAccountStatus() {
       setIsLoading(true);
@@ -50,7 +48,6 @@ export default function ProfileSessionsPage() {
       try {
         const nextSessions = await customerApi.getAccountSessions(
           tokenSnapshot,
-          refreshTokenSnapshot,
         );
 
         if (isMounted) {
@@ -76,7 +73,7 @@ export default function ProfileSessionsPage() {
     return () => {
       isMounted = false;
     };
-  }, [accessToken, isBootstrapping, refreshToken]);
+  }, [accessToken, isBootstrapping]);
 
   async function revokeSession(sessionId: string, isCurrent: boolean) {
     if (!accessToken) {
@@ -94,11 +91,7 @@ export default function ProfileSessionsPage() {
         return;
       }
 
-      if (refreshToken) {
-        setSessions(
-          await customerApi.getAccountSessions(accessToken, refreshToken),
-        );
-      }
+      setSessions(await customerApi.getAccountSessions(accessToken));
     } catch (caughtError) {
       setError(
         caughtError instanceof Error

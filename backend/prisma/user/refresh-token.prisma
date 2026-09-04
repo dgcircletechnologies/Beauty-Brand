@@ -1,19 +1,27 @@
 model RefreshToken {
-  id          String    @id @default(cuid())
-  userId      String
-  tokenHash   String    @unique
-  expiresAt   DateTime
-  revokedAt   DateTime?
-  ipAddress   String?
-  userAgent   String?
-  deviceLabel String?
-  location    String?
-  lastUsedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  id                String    @id @default(cuid())
+  sessionId         String
+  userId            String
+  tokenHash         String    @unique
+  jti               String?   @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedAt        DateTime?
+  replacedByTokenId String?
+  reusedAt          DateTime?
+  ipAddress         String?
+  userAgent         String?
+  deviceLabel       String?
+  location          String?
+  lastUsedAt        DateTime?
+  createdAt         DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, sessionId])
   @@index([userId, expiresAt])
   @@index([revokedAt])
+  @@index([replacedAt])
+  @@index([reusedAt])
   @@index([lastUsedAt])
 }

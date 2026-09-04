@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { HomeCategorySection } from "@/components/customer/category-browser";
-import { useCurrency } from "@/contexts/currency-context";
+import { OfferBadge } from "@/components/customer/offer-badge";
+import { OfferPrice } from "@/components/customer/offer-price";
 import * as customerApi from "@/lib/api/customer";
 
 const hero = {
@@ -39,7 +40,11 @@ function ButtonArrowIcon() {
 }
 
 function getPrimaryPrice(product: customerApi.CustomerProduct) {
-  return product.variants?.[0]?.price ?? "0";
+  return product.displayPrice ?? product.variants?.[0]?.price ?? "0";
+}
+
+function getDisplayPricing(product: customerApi.CustomerProduct) {
+  return product.displayPricing ?? product.variants?.[0]?.pricing ?? null;
 }
 
 function getDisplayRating(product: customerApi.CustomerProduct) {
@@ -89,7 +94,6 @@ function HomeProductCard({
   fallbackImage: string;
   product: customerApi.CustomerProduct;
 }) {
-  const { formatPrice } = useCurrency();
   const images = product.images?.length
     ? product.images
     : [
@@ -105,6 +109,8 @@ function HomeProductCard({
   const averageRating = useMemo(() => getDisplayRating(product), [product]);
   const reviewCount = getReviewCount(product);
   const shouldShowRating = reviewCount > 0 && averageRating > 0;
+  const displayPricing = getDisplayPricing(product);
+  const offer = product.effectiveOffer ?? displayPricing?.offer ?? null;
   const activeImage =
     images[Math.min(activeImageIndex, images.length - 1)] ?? images[0];
   const activeTag =
@@ -151,6 +157,19 @@ function HomeProductCard({
             {activeTag.name}
           </span>
         ) : null}
+        {product.hasOffer || displayPricing?.hasOffer ? (
+          offer ? (
+            <OfferBadge
+              className="product-card-offer-badge"
+              offer={offer}
+              buyXGetY={displayPricing?.buyXGetY}
+            />
+          ) : (
+            <span className="offer-badge product-card-offer-badge">
+              Offer Available
+            </span>
+          )
+        ) : null}
         <img alt={activeImage.altText ?? product.name} src={activeImage.url} />
       </span>
       <span className="home-product-info">
@@ -159,44 +178,59 @@ function HomeProductCard({
           <strong>{product.name}</strong>
           {shouldShowRating ? <NumericRating rating={averageRating} /> : null}
         </span>
-        <em>{formatPrice(getPrimaryPrice(product))}</em>
+        <em>
+          <OfferPrice
+            price={getPrimaryPrice(product)}
+            pricing={displayPricing}
+          />
+        </em>
       </span>
     </Link>
   );
 }
 
-function HomeFeatureSection() {
+type HomeFeatureSectionProps = {
+  eyebrow: string;
+  title: string;
+  body: string;
+  cta: string;
+  smallImage: string;
+  smallImageAlt: string;
+  largeImage: string;
+  largeImageAlt: string;
+};
+
+function HomeFeatureSection({
+  eyebrow,
+  title,
+  body,
+  cta,
+  smallImage,
+  smallImageAlt,
+  largeImage,
+  largeImageAlt,
+}: HomeFeatureSectionProps) {
   return (
     <section className="home-feature-section">
       <div className="home-feature-main">
         <div className="home-feature-heading">
-          <p className="eyebrow">Clean care</p>
-          <h2>Clean, Beyond Reproach Skincare.</h2>
+          <p className="eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
         </div>
         <div className="home-feature-bottom">
           <div className="home-feature-small">
-            <img
-              alt="BlueWave skincare texture detail"
-              src="/images/skincare/feature-1.webp"
-            />
+            <img alt={smallImageAlt} src={smallImage} />
           </div>
           <div className="home-feature-copy">
-            <p>
-              Formulas built around effective ingredients, gentle textures, and
-              routines that feel easy to keep. No overpromising, just everyday
-              care that earns its shelf space.
-            </p>
+            <p>{body}</p>
             <Link className="secondary-link-button" href="/shop">
-              Explore products
+              {cta}
             </Link>
           </div>
         </div>
       </div>
       <div className="home-feature-large">
-        <img
-          alt="BlueWave skincare campaign visual"
-          src="/images/skincare/feature-6.webp"
-        />
+        <img alt={largeImageAlt} src={largeImage} />
       </div>
     </section>
   );
@@ -327,6 +361,111 @@ function HomeProductsSection() {
   );
 }
 
+function HomeOffersSection() {
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const [products, setProducts] = useState<customerApi.CustomerProduct[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadOfferProducts() {
+      try {
+        const nextProducts = await customerApi.getCustomerOfferProducts(10);
+
+        if (isMounted) {
+          setProducts(nextProducts);
+        }
+      } catch {
+        if (isMounted) {
+          setProducts([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadOfferProducts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  function scrollProducts(direction: "previous" | "next") {
+    const carousel = carouselRef.current;
+
+    if (!carousel) {
+      return;
+    }
+
+    const card = carousel.querySelector<HTMLElement>(".home-product-card");
+    const distance = card ? card.offsetWidth + 20 : carousel.clientWidth * 0.8;
+
+    carousel.scrollBy({
+      left: direction === "next" ? distance : -distance,
+      behavior: "smooth",
+    });
+  }
+
+  if (!isLoading && !products.length) {
+    return null;
+  }
+
+  return (
+    <section className="home-products-section home-offers-section" aria-labelledby="home-offers">
+      <div className="home-section-heading">
+        <div className="home-products-title">
+          <p className="eyebrow">Offers</p>
+          <h2 id="home-offers">Special offers.</h2>
+        </div>
+        <div className="home-category-actions">
+          <Link className="home-browse-button" href="/shop?offersOnly=true">
+            View all
+            <span aria-hidden="true">
+              <ButtonArrowIcon />
+            </span>
+          </Link>
+          <div className="home-carousel-buttons relative left-[1.25vw]" aria-label="Offer product carousel">
+            <button
+              aria-label="Previous offer products"
+              type="button"
+              onClick={() => scrollProducts("previous")}
+            >
+              &lsaquo;
+            </button>
+            <button
+              aria-label="Next offer products"
+              type="button"
+              onClick={() => scrollProducts("next")}
+            >
+              &rsaquo;
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="category-loading">Loading offers...</div>
+      ) : (
+        <div className="home-products-track" ref={carouselRef}>
+          {products.map((product, index) => (
+            <HomeProductCard
+              fallbackImage={
+                fallbackProductImages[index % fallbackProductImages.length]
+              }
+              key={product.id}
+              product={product}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function HomeExperience() {
   return (
     <main className="home-page">
@@ -347,7 +486,27 @@ export function HomeExperience() {
         </div>
       </section>
       <HomeCategorySection />
-      <HomeFeatureSection />
+      <HomeFeatureSection
+        eyebrow="Daily rituals"
+        title="Care That Fits Your Routine."
+        body="Discover everyday skincare essentials selected to support hydration, comfort, and a healthier-looking skin barrier."
+        cta="Explore skincare"
+        smallImage="/images/skincare/feature-3.webp"
+        smallImageAlt="BlueWave skincare routine detail"
+        largeImage="/images/skincare/feature-5.webp"
+        largeImageAlt="BlueWave skincare daily care visual"
+      />
+      <HomeOffersSection />
+      <HomeFeatureSection
+        eyebrow="Clean care"
+        title="Clean, Beyond Reproach Skincare."
+        body="Formulas built around effective ingredients, gentle textures, and routines that feel easy to keep. No overpromising, just everyday care that earns its shelf space."
+        cta="Explore products"
+        smallImage="/images/skincare/feature-1.webp"
+        smallImageAlt="BlueWave skincare texture detail"
+        largeImage="/images/skincare/feature-6.webp"
+        largeImageAlt="BlueWave skincare campaign visual"
+      />
       <HomeProductsSection />
     </main>
   );

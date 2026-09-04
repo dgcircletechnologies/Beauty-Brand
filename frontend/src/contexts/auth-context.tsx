@@ -24,10 +24,13 @@ import type {
 const AUTH_STORAGE_KEY = "skincare.auth.session";
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
+type StoredAuthSession = {
+  user: AuthUser;
+};
+
 type AuthContextValue = {
   user: AuthUser | null;
   accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   isBootstrapping: boolean;
   login: (payload: LoginPayload) => Promise<AuthSession>;
@@ -53,7 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(nextSession);
 
     if (nextSession) {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+      window.localStorage.setItem(
+        AUTH_STORAGE_KEY,
+        JSON.stringify({
+          user: nextSession.user,
+        } satisfies StoredAuthSession),
+      );
       return;
     }
 
@@ -66,20 +74,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [router]);
 
-  const refreshStoredSession = useCallback(
-    async (currentSession: AuthSession) => {
-      const tokens = await authApi.refreshToken(currentSession.refreshToken);
-      const nextSession = {
-        ...currentSession,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      };
+  const refreshStoredSession = useCallback(async () => {
+    const nextSession = await authApi.refreshToken();
+    persistSession(nextSession);
 
-      persistSession(nextSession);
-      return nextSession;
-    },
-    [persistSession],
-  );
+    return nextSession;
+  }, [persistSession]);
 
   useEffect(() => {
     let isMounted = true;
@@ -87,28 +87,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function bootstrapSession() {
       const storedSession = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
-      if (!storedSession) {
-        setIsBootstrapping(false);
-        return;
-      }
-
       try {
-        const parsedSession = JSON.parse(storedSession) as AuthSession;
-        const tokens = await authApi.refreshToken(parsedSession.refreshToken);
+        const refreshedSession = await authApi.refreshToken();
 
         if (!isMounted) {
           return;
         }
 
-        persistSession({
-          ...parsedSession,
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-        });
+        persistSession(refreshedSession);
       } catch {
         if (isMounted) {
+          if (storedSession) {
+            window.localStorage.removeItem(AUTH_STORAGE_KEY);
+          }
+
           persistSession(null);
-          redirectToLogin();
         }
       } finally {
         if (isMounted) {
@@ -122,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [persistSession, redirectToLogin]);
+  }, [persistSession]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {
@@ -157,12 +150,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshSession = useCallback(async () => {
-    if (!session?.refreshToken) {
+    if (!session) {
       return;
     }
 
     try {
-      await refreshStoredSession(session);
+      await refreshStoredSession();
     } catch {
       persistSession(null);
       redirectToLogin();
@@ -184,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
-    if (!session?.refreshToken) {
+    if (!session) {
       return;
     }
 
@@ -195,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refreshSession, session?.refreshToken]);
+  }, [refreshSession, session]);
 
   useEffect(() => {
     let isRefreshing = false;
@@ -205,7 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
 
-      if (!session?.refreshToken) {
+      if (!session) {
         persistSession(null);
         redirectToLogin();
         return null;
@@ -214,7 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isRefreshing = true;
 
       try {
-        const nextSession = await refreshStoredSession(session);
+        const nextSession = await refreshStoredSession();
         return nextSession.accessToken;
       } catch {
         persistSession(null);
@@ -231,18 +224,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [persistSession, redirectToLogin, refreshStoredSession, session]);
 
   const logout = useCallback(async () => {
-    if (session?.accessToken && session.refreshToken) {
-      await authApi
-        .logout(session.refreshToken, session.accessToken)
-        .catch(() => undefined);
+    if (session) {
+      await authApi.logout().catch(() => undefined);
     }
 
     persistSession(null);
   }, [persistSession, session]);
 
   const logoutAll = useCallback(async () => {
-    if (session?.accessToken) {
-      await authApi.logoutAll(session.accessToken).catch(() => undefined);
+    if (session) {
+      await authApi.logoutAll().catch(() => undefined);
     }
 
     persistSession(null);
@@ -252,7 +243,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user: session?.user ?? null,
       accessToken: session?.accessToken ?? null,
-      refreshToken: session?.refreshToken ?? null,
       isAuthenticated: Boolean(session?.accessToken),
       isBootstrapping,
       login,

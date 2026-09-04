@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import { OfferBadge } from "@/components/customer/offer-badge";
+import { OfferPrice } from "@/components/customer/offer-price";
 import { UserShell } from "@/components/customer/user-shell";
 import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
+import { ApiError } from "@/lib/api/client";
 
 type RazorpayCheckoutResponse = {
   razorpay_order_id: string;
@@ -95,6 +98,23 @@ function loadRazorpayCheckout() {
   });
 }
 
+function shouldRefreshCheckoutAfterError(error: unknown) {
+  if (!(error instanceof ApiError)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+
+  return (
+    error.status === 409 ||
+    message.includes("price") ||
+    message.includes("cart") ||
+    message.includes("offer") ||
+    message.includes("stock") ||
+    message.includes("available")
+  );
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -123,6 +143,56 @@ export default function CheckoutPage() {
           .filter(Boolean)
       : [];
   }, [searchParams]);
+
+  const loadCheckoutPreview = useCallback(
+    async (options: { showLoading?: boolean } = {}) => {
+      if (!accessToken || !selectedCurrency) {
+        return;
+      }
+
+      if (options.showLoading ?? true) {
+        setIsLoading(true);
+      }
+      setError(null);
+
+      try {
+        const nextPreview = await customerApi.getCheckoutPreview(accessToken, {
+          cartItemIds,
+          currencyCode: selectedCurrency.code,
+          shippingAddressId: shippingAddressId || undefined,
+          shippingRateId: selectedShippingRateId || undefined,
+        });
+
+        setPreview(nextPreview);
+
+        const nextSelectedRateId =
+          nextPreview.selectedShippingRate?.id ??
+          nextPreview.shippingRates[0]?.id ??
+          "";
+
+        if (selectedShippingRateId !== nextSelectedRateId) {
+          setSelectedShippingRateId(nextSelectedRateId);
+        }
+      } catch (caughtError) {
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to load checkout",
+        );
+      } finally {
+        if (options.showLoading ?? true) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [
+      accessToken,
+      cartItemIds,
+      selectedCurrency,
+      selectedShippingRateId,
+      shippingAddressId,
+    ],
+  );
 
   useEffect(() => {
     if (!accessToken) {
@@ -181,63 +251,8 @@ export default function CheckoutPage() {
       return;
     }
 
-    let isMounted = true;
-    const token = accessToken;
-    const currencyCode = selectedCurrency.code;
-
-    async function loadPreview() {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const nextPreview = await customerApi.getCheckoutPreview(token, {
-          cartItemIds,
-          currencyCode,
-          shippingAddressId: shippingAddressId || undefined,
-          shippingRateId: selectedShippingRateId || undefined,
-        });
-
-        if (!isMounted) {
-          return;
-        }
-
-        setPreview(nextPreview);
-
-        const nextSelectedRateId =
-          nextPreview.selectedShippingRate?.id ??
-          nextPreview.shippingRates[0]?.id ??
-          "";
-
-        if (selectedShippingRateId !== nextSelectedRateId) {
-          setSelectedShippingRateId(nextSelectedRateId);
-        }
-      } catch (caughtError) {
-        if (isMounted) {
-          setError(
-            caughtError instanceof Error
-              ? caughtError.message
-              : "Unable to load checkout",
-          );
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadPreview();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    accessToken,
-    cartItemIds,
-    selectedCurrency,
-    selectedShippingRateId,
-    shippingAddressId,
-  ]);
+    void Promise.resolve().then(() => loadCheckoutPreview());
+  }, [accessToken, selectedCurrency, loadCheckoutPreview]);
 
   async function handleConfirmOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -305,6 +320,15 @@ export default function CheckoutPage() {
       });
       checkout.open();
     } catch (caughtError) {
+      if (shouldRefreshCheckoutAfterError(caughtError)) {
+        await loadCheckoutPreview({ showLoading: false });
+        setError(
+          "Your cart pricing has changed. Please review the latest total before placing your order.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
       setError(
         caughtError instanceof Error
           ? caughtError.message
@@ -505,20 +529,96 @@ export default function CheckoutPage() {
                       <small>
                         {item.sku} x {item.quantity}
                       </small>
+                      {item.pricing?.offer ? (
+                        <OfferBadge
+                          offer={item.pricing.offer}
+                          buyXGetY={item.pricing.buyXGetY}
+                        />
+                      ) : null}
+                      <OfferPrice
+                        price={item.displayUnitBasePrice ?? item.displayUnitPrice}
+                        effectivePrice={item.displayUnitPrice}
+                        offer={item.pricing?.offer}
+                      />
+                      {item.displayLineDiscountAmount ? (
+                        <small>
+                          Saved{" "}
+                          {formatMoney(
+                            item.displayLineDiscountAmount,
+                            preview.currency,
+                          )}
+                        </small>
+                      ) : null}
                     </span>
                     <strong>
                       {formatMoney(item.displayLineTotal, preview.currency)}
                     </strong>
                   </div>
                 ))}
+                {(preview.rewardItems ?? []).map((item) => (
+                  <div
+                    className="checkout-item checkout-reward-item"
+                    key={`${item.sourceCartItemId}-${item.variantId}`}
+                  >
+                    <span>
+                      <strong>{item.productName}</strong>
+                      <small>
+                        {item.sku} x {item.quantity}
+                      </small>
+                      <span className="offer-badge">Offer Reward</span>
+                      {item.offer ? <OfferBadge offer={item.offer} /> : null}
+                      <small>
+                        Saved {formatMoney(item.displayUnitPrice, preview.currency)}
+                      </small>
+                    </span>
+                    <strong>Free</strong>
+                  </div>
+                ))}
               </div>
               <div className="summary-lines">
                 <span>
-                  Subtotal
+                  Items subtotal
                   <strong>
-                    {formatMoney(preview.displaySubtotal, preview.currency)}
+                    {formatMoney(
+                      preview.displayPreDiscountSubtotal ??
+                        preview.displaySubtotal,
+                      preview.currency,
+                    )}
                   </strong>
                 </span>
+                {preview.discountAmount > 0 ? (
+                  <span>
+                    Offer savings
+                    <strong>
+                      -
+                      {formatMoney(
+                        preview.displayDiscountAmount ??
+                          preview.discountAmount,
+                        preview.currency,
+                      )}
+                    </strong>
+                  </span>
+                ) : null}
+                {preview.rewardSavings ? (
+                  <span>
+                    Reward savings
+                    <strong>
+                      -
+                      {formatMoney(
+                        preview.displayRewardSavings ?? preview.rewardSavings,
+                        preview.currency,
+                      )}
+                    </strong>
+                  </span>
+                ) : null}
+                {(preview.discountAmount > 0 || preview.rewardSavings) ? (
+                  <span>
+                    Discounted subtotal
+                    <strong>
+                      {formatMoney(preview.displaySubtotal, preview.currency)}
+                    </strong>
+                  </span>
+                ) : null}
                 <span>
                   Shipping
                   <strong>

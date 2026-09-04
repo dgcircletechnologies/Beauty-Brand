@@ -152,6 +152,20 @@ export class OrderService {
       },
       selectedShippingRate,
       selectedCartItemIds: items.map((item) => item.id),
+      displayPreDiscountSubtotal: this.decimalToRoundedNumber(
+        new Prisma.Decimal(totals.basePreDiscountSubtotal).mul(
+          totals.rateDecimal,
+        ),
+        totals.displayCurrency.decimalDigits,
+      ),
+      displayDiscountAmount: this.decimalToRoundedNumber(
+        new Prisma.Decimal(totals.discountAmount).mul(totals.rateDecimal),
+        totals.displayCurrency.decimalDigits,
+      ),
+      displayRewardSavings: this.decimalToRoundedNumber(
+        new Prisma.Decimal(totals.rewardSavings).mul(totals.rateDecimal),
+        totals.displayCurrency.decimalDigits,
+      ),
     };
   }
 
@@ -1054,6 +1068,22 @@ export class OrderService {
       checkoutItem.unitFinalPrice.mul(totals.rateDecimal),
       totals.displayCurrency.decimalDigits,
     );
+    const displayUnitBasePrice = this.decimalToRoundedNumber(
+      checkoutItem.unitBasePrice.mul(totals.rateDecimal),
+      totals.displayCurrency.decimalDigits,
+    );
+    const displayUnitDiscountAmount = this.decimalToRoundedNumber(
+      checkoutItem.unitDiscountAmount.mul(totals.rateDecimal),
+      totals.displayCurrency.decimalDigits,
+    );
+    const displayLineBaseSubtotal = this.decimalToRoundedNumber(
+      checkoutItem.lineBaseSubtotal.mul(totals.rateDecimal),
+      totals.displayCurrency.decimalDigits,
+    );
+    const displayLineDiscountAmount = this.decimalToRoundedNumber(
+      checkoutItem.lineDiscountAmount.mul(totals.rateDecimal),
+      totals.displayCurrency.decimalDigits,
+    );
     const displayLineTotal = this.decimalToRoundedNumber(
       checkoutItem.lineFinalSubtotal.mul(totals.rateDecimal),
       totals.displayCurrency.decimalDigits,
@@ -1074,7 +1104,11 @@ export class OrderService {
         checkoutItem.lineFinalSubtotal,
         totals.baseCurrency.decimalDigits,
       ),
+      displayUnitBasePrice,
+      displayUnitDiscountAmount,
       displayUnitPrice,
+      displayLineBaseSubtotal,
+      displayLineDiscountAmount,
       displayLineTotal,
       unitPrice: displayUnitPrice,
       lineTotal: displayLineTotal,
@@ -1736,6 +1770,10 @@ export class OrderService {
         unitPrice: Number(item.unitPrice),
         discountAmount: Number(item.discountAmount),
         lineTotal: Number(item.lineTotal),
+        displayBaseUnitPrice: convert(item.baseUnitPrice),
+        displayUnitDiscountAmount: convert(item.unitDiscountAmount ?? 0),
+        displayLineBaseSubtotal: convert(item.lineSubtotal),
+        displayLineDiscountAmount: convert(item.discountAmount),
         offer: item.appliedOfferId
           ? {
               id: item.appliedOfferId,

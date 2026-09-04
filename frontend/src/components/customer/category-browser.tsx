@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useCurrency } from "@/contexts/currency-context";
+import { OfferBadge } from "@/components/customer/offer-badge";
+import { OfferPrice } from "@/components/customer/offer-price";
 import * as customerApi from "@/lib/api/customer";
 
 function ButtonArrowIcon() {
@@ -23,7 +24,11 @@ function getRootCategories(categories: customerApi.CustomerCategory[]) {
 }
 
 function getPrimaryPrice(product: customerApi.CustomerProduct) {
-  return product.variants?.[0]?.price ?? "0";
+  return product.displayPrice ?? product.variants?.[0]?.price ?? "0";
+}
+
+function getDisplayPricing(product: customerApi.CustomerProduct) {
+  return product.displayPricing ?? product.variants?.[0]?.pricing ?? null;
 }
 
 function CategoryCard({
@@ -34,17 +39,27 @@ function CategoryCard({
   size?: "standard" | "large";
 }) {
   const image = getCategoryImage(category);
+  const categoryOffer = category.offer;
 
   return (
     <Link
       className={`category-browse-card category-browse-card-${size}`}
       href={`/categories/${category.slug}`}
     >
-      {image ? (
-        <img alt={image.altText ?? category.name} src={image.url} />
-      ) : (
-        <span>{category.name.slice(0, 1)}</span>
-      )}
+      <span className="category-browse-media">
+        {image ? (
+          <img alt={image.altText ?? category.name} src={image.url} />
+        ) : (
+          <span>{category.name.slice(0, 1)}</span>
+        )}
+        {categoryOffer?.hasOffer ? (
+          <OfferBadge
+            className="product-card-offer-badge"
+            offer={categoryOffer.offer}
+            buyXGetY={categoryOffer.buyXGetY}
+          />
+        ) : null}
+      </span>
       <div>
         <strong>{category.name}</strong>
         {category.description ? (
@@ -58,21 +73,39 @@ function CategoryCard({
 }
 
 function ProductCard({ product }: { product: customerApi.CustomerProduct }) {
-  const { formatPrice } = useCurrency();
   const image = product.images?.[0] ?? null;
+  const displayPricing = getDisplayPricing(product);
+  const offer = product.effectiveOffer ?? displayPricing?.offer ?? null;
 
   return (
     <Link className="category-product-card" href={`/products/${product.slug}`}>
-      {image ? (
-        <img alt={image.altText ?? product.name} src={image.url} />
-      ) : (
-        <span>{product.name.slice(0, 1)}</span>
-      )}
+      <span className="category-product-media">
+        {image ? (
+          <img alt={image.altText ?? product.name} src={image.url} />
+        ) : (
+          <span>{product.name.slice(0, 1)}</span>
+        )}
+        {product.hasOffer || displayPricing?.hasOffer ? (
+          offer ? (
+            <OfferBadge
+              className="product-card-offer-badge"
+              offer={offer}
+              buyXGetY={displayPricing?.buyXGetY}
+            />
+          ) : (
+            <span className="offer-badge product-card-offer-badge">
+              Offer Available
+            </span>
+          )
+        ) : null}
+      </span>
       <div>
         <small>{product.isFeatured ? "Featured" : "Product"}</small>
         <strong>{product.name}</strong>
         <p>{product.shortDescription || "Skincare product"}</p>
-        <em>{formatPrice(getPrimaryPrice(product))}</em>
+        <em>
+          <OfferPrice price={getPrimaryPrice(product)} pricing={displayPricing} />
+        </em>
       </div>
     </Link>
   );

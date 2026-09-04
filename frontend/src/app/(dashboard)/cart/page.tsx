@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { OfferBadge } from "@/components/customer/offer-badge";
+import { OfferPrice } from "@/components/customer/offer-price";
 import { UserShell } from "@/components/customer/user-shell";
 import { useAuth } from "@/contexts/auth-context";
 import { useCurrency } from "@/contexts/currency-context";
@@ -31,6 +33,12 @@ function getAttributeDisplayValue(
   return null;
 }
 
+function toAmount(value: number | string | null | undefined) {
+  const amount = Number(value);
+
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 export default function CartPage() {
   const router = useRouter();
   const { accessToken } = useAuth();
@@ -42,6 +50,29 @@ export default function CartPage() {
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const availableItemCount =
     cart?.items.filter((item) => item.availability.isAvailable).length ?? 0;
+  const isMutatingCart = Boolean(updatingItemId);
+  const cartCurrency = cart?.currency;
+  const cartSubtotalBeforeDiscount = toAmount(
+    cart?.summary?.displayBaseSubtotal ?? cart?.displaySubtotal,
+  );
+  const cartOfferSavings = toAmount(cart?.summary?.displayDiscountTotal);
+  const cartRewardSavings = toAmount(cart?.summary?.displayRewardSavings);
+  const totalCartSavings = cartOfferSavings + cartRewardSavings;
+  const cartFinalSubtotal = toAmount(
+    cart?.summary?.displayFinalSubtotal ?? cart?.displaySubtotal,
+  );
+
+  function formatCartMoney(amount: number | string) {
+    const value = Number(amount);
+
+    if (!cartCurrency || !Number.isFinite(value)) {
+      return formatPrice(value || 0);
+    }
+
+    return `${cartCurrency.symbol ?? cartCurrency.code}${value.toFixed(
+      cartCurrency.decimalDigits,
+    )}`;
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -198,7 +229,21 @@ export default function CartPage() {
                     : "Nothing selected, checkout will include all products"}
                 </p>
               </div>
-              {cart.items.map((item) => (
+              {cart.items.map((item) => {
+                const pricing = item.pricing;
+                const offer = pricing?.offer ?? null;
+                const rewards = (cart.rewardItems ?? []).filter(
+                  (reward) => reward.sourceCartItemId === item.id,
+                );
+                const lineSavings = toAmount(
+                  item.displayLineDiscountAmount ??
+                    pricing?.lineDiscountAmount ??
+                    0,
+                );
+                const originalUnitPrice =
+                  item.displayUnitBasePrice ?? item.displayUnitPrice;
+
+                return (
                 <article className="cart-item" key={item.id}>
                   <label className="cart-item-select" aria-label="Select item">
                     <input
@@ -242,7 +287,35 @@ export default function CartPage() {
                           ))}
                         <span>SKU {item.variant.sku}</span>
                       </div>
-                      <strong>{formatPrice(item.displayUnitPrice)}</strong>
+                      {offer ? (
+                        <OfferBadge
+                          offer={offer}
+                          buyXGetY={pricing?.buyXGetY}
+                        />
+                      ) : null}
+                      <OfferPrice
+                        price={originalUnitPrice}
+                        effectivePrice={item.displayUnitPrice}
+                        offer={offer}
+                      />
+                      {lineSavings > 0 ? (
+                        <small className="cart-offer-note">
+                          You save {formatCartMoney(lineSavings)} on this line
+                        </small>
+                      ) : null}
+                      {rewards.length ? (
+                        <div className="cart-reward-list">
+                          {rewards.map((reward) => (
+                            <div className="cart-reward-item" key={reward.variantId}>
+                              <span>Offer Reward</span>
+                              <strong>{reward.product.name}</strong>
+                              <small>
+                                SKU {reward.variant.sku} x {reward.quantity} free
+                              </small>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="cart-item-controls">
@@ -293,11 +366,12 @@ export default function CartPage() {
                           ? "In stock"
                           : item.availability.message}
                       </p>
-                      <strong>{formatPrice(item.displayLineTotal)}</strong>
+                      <strong>{formatCartMoney(item.displayLineTotal)}</strong>
                     </div>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
             <aside className="cart-summary">
               <h2>
@@ -305,9 +379,27 @@ export default function CartPage() {
               </h2>
               <dl>
                 <div>
-                  <dt>Subtotal</dt>
-                  <dd>{formatPrice(cart.displaySubtotal)}</dd>
+                  <dt>Items subtotal</dt>
+                  <dd>{formatCartMoney(cartSubtotalBeforeDiscount)}</dd>
                 </div>
+                {cartOfferSavings > 0 ? (
+                  <div>
+                    <dt>Offer savings</dt>
+                    <dd>-{formatCartMoney(cartOfferSavings)}</dd>
+                  </div>
+                ) : null}
+                {cartRewardSavings > 0 ? (
+                  <div>
+                    <dt>Reward savings</dt>
+                    <dd>-{formatCartMoney(cartRewardSavings)}</dd>
+                  </div>
+                ) : null}
+                {totalCartSavings > 0 ? (
+                  <div>
+                    <dt>Discounted subtotal</dt>
+                    <dd>{formatCartMoney(cartFinalSubtotal)}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>Shipping estimate</dt>
                   <dd>At checkout</dd>
@@ -318,16 +410,28 @@ export default function CartPage() {
                 </div>
                 <div>
                   <dt>Order total</dt>
-                  <dd>{formatPrice(cart.displaySubtotal)}</dd>
+                  <dd>{formatCartMoney(cartFinalSubtotal)}</dd>
                 </div>
               </dl>
+              {cart.rewardIssues?.length ? (
+                <div className="cart-reward-issues">
+                  {cart.rewardIssues.map((issue) => (
+                    <p key={`${issue.sourceCartItemId}-${issue.sourceOfferId}`}>
+                      {issue.message}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
               <button
                 className="primary-button"
-                disabled={cart.hasUnavailableItems && selectedItemIds.length === 0}
+                disabled={
+                  isMutatingCart ||
+                  (cart.hasUnavailableItems && selectedItemIds.length === 0)
+                }
                 type="button"
                 onClick={goToCheckout}
               >
-                Checkout
+                {isMutatingCart ? "Updating cart..." : "Checkout"}
               </button>
               <p className="cart-summary-note">
                 or{" "}

@@ -12,7 +12,8 @@ import {
   type TouchEvent,
 } from "react";
 
-import { useCurrency } from "@/contexts/currency-context";
+import { OfferBadge } from "@/components/customer/offer-badge";
+import { OfferPrice } from "@/components/customer/offer-price";
 import * as customerApi from "@/lib/api/customer";
 
 const filterSections = [
@@ -29,6 +30,7 @@ const tagBadgeThemes = ["coral", "sage", "ink", "rose", "gold"] as const;
 
 const sortOptions = [
   { value: "featured", label: "Featured" },
+  { value: "offers-first", label: "Offers First" },
   { value: "newest", label: "Newest" },
   { value: "rating", label: "Best Rating" },
   { value: "price-asc", label: "Price: Low to High" },
@@ -54,7 +56,11 @@ function readList(searchParams: URLSearchParams, key: string) {
 }
 
 function getPrimaryPrice(product: customerApi.CustomerProduct) {
-  return product.variants?.[0]?.price ?? "0";
+  return product.displayPrice ?? product.variants?.[0]?.price ?? "0";
+}
+
+function getDisplayPricing(product: customerApi.CustomerProduct) {
+  return product.displayPricing ?? product.variants?.[0]?.pricing ?? null;
 }
 
 function getDisplayRating(product: customerApi.CustomerProduct) {
@@ -107,10 +113,16 @@ function CloseIcon() {
 
 function ProductImageSlider({
   images,
+  offer,
+  pricing,
+  productHasOffer,
   tags,
   productName,
 }: {
   images: customerApi.CustomerProductImage[];
+  offer: customerApi.CustomerProduct["effectiveOffer"];
+  pricing: customerApi.CustomerProduct["displayPricing"];
+  productHasOffer: boolean;
   tags: customerApi.CustomerMetadataItem[];
   productName: string;
 }) {
@@ -160,6 +172,19 @@ function ProductImageSlider({
           >
             {currentTag.name}
           </span>
+        ) : null}
+        {productHasOffer || pricing?.hasOffer ? (
+          offer ? (
+            <OfferBadge
+              className="product-card-offer-badge"
+              offer={offer}
+              buyXGetY={pricing?.buyXGetY}
+            />
+          ) : (
+            <span className="offer-badge product-card-offer-badge">
+              Offer Available
+            </span>
+          )
         ) : null}
       </div>
     );
@@ -239,6 +264,19 @@ function ProductImageSlider({
           {currentTag.name}
         </span>
       ) : null}
+      {productHasOffer || pricing?.hasOffer ? (
+        offer ? (
+          <OfferBadge
+            className="product-card-offer-badge"
+            offer={offer}
+            buyXGetY={pricing?.buyXGetY}
+          />
+        ) : (
+          <span className="offer-badge product-card-offer-badge">
+            Offer Available
+          </span>
+        )
+      ) : null}
       <div
         className="shop-product-image-track"
         style={{ transform: `translateX(-${currentIndex * 100}%)` }}
@@ -267,23 +305,22 @@ function NumericRating({ rating, count }: { rating: number; count: number }) {
   );
 }
 
-function ShopProductCard({
-  formatPrice,
-  product,
-}: {
-  formatPrice: (amount: string | number) => string;
-  product: customerApi.CustomerProduct;
-}) {
+function ShopProductCard({ product }: { product: customerApi.CustomerProduct }) {
   const averageRating = useMemo(() => getDisplayRating(product), [product]);
   const reviewCount = product.reviewCount ?? product.reviews?.length ?? 0;
   const shouldShowRating = reviewCount > 0 && averageRating > 0;
   const productTags = product.tags?.map((tagLink) => tagLink.tag) ?? [];
+  const displayPricing = getDisplayPricing(product);
+  const offer = product.effectiveOffer ?? displayPricing?.offer ?? null;
 
   return (
     <article className="shop-product-card">
       <Link href={`/products/${product.slug}`}>
         <ProductImageSlider
           images={product.images ?? []}
+          offer={offer}
+          pricing={displayPricing}
+          productHasOffer={Boolean(product.hasOffer)}
           productName={product.name}
           tags={productTags}
         />
@@ -294,7 +331,10 @@ function ShopProductCard({
             <Link href={`/products/${product.slug}`}>{product.name}</Link>
           </h2>
           <span className="shop-product-price">
-            {formatPrice(getPrimaryPrice(product))}
+            <OfferPrice
+              price={getPrimaryPrice(product)}
+              pricing={displayPricing}
+            />
           </span>
         </div>
         <div className="shop-product-meta-row flex! space-between">
@@ -312,7 +352,6 @@ export function CustomerShop() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { formatPrice } = useCurrency();
   const [response, setResponse] =
     useState<customerApi.CustomerShopProductsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -334,30 +373,12 @@ export function CustomerShop() {
       tag: readList(searchParams, "tag"),
       minPrice: searchParams.get("minPrice") ?? "",
       maxPrice: searchParams.get("maxPrice") ?? "",
-      sort: searchParams.get("sort") ?? "featured",
+      sort: searchParams.get("sort") ?? "offers-first",
       page: searchParams.get("page") ?? "1",
       pageSize: "12",
+      offersOnly: searchParams.get("offersOnly") === "true" ? "true" : "",
     }),
     [searchParams],
-  );
-
-  const queryKey = useMemo(
-    () =>
-      [
-        selected.q,
-        selected.category.join(","),
-        selected.skinType.join(","),
-        selected.concern.join(","),
-        selected.benefit.join(","),
-        selected.ageGroup.join(","),
-        selected.formula.join(","),
-        selected.tag.join(","),
-        selected.minPrice,
-        selected.maxPrice,
-        selected.sort,
-        selected.page,
-      ].join("|"),
-    [selected],
   );
 
   useEffect(() => {
@@ -393,7 +414,7 @@ export function CustomerShop() {
     return () => {
       isMounted = false;
     };
-  }, [queryKey]);
+  }, [selected]);
 
   const filters = response?.filters ?? emptyFilters;
   const pagination = response?.pagination;
@@ -446,7 +467,8 @@ export function CustomerShop() {
     selected.ageGroup.length +
     selected.formula.length +
     selected.tag.length +
-    Number(Boolean(selected.minPrice || selected.maxPrice));
+    Number(Boolean(selected.minPrice || selected.maxPrice)) +
+    Number(Boolean(selected.offersOnly));
 
   function clearFilters() {
     updateSearchParams({
@@ -459,6 +481,7 @@ export function CustomerShop() {
       tag: null,
       minPrice: null,
       maxPrice: null,
+      offersOnly: null,
       page: null,
     });
   }
@@ -531,6 +554,24 @@ export function CustomerShop() {
           </section>
         );
       })}
+
+      <section className="shop-filter-section">
+        <div className="shop-filter-options always-open">
+          <label>
+            <input
+              checked={selected.offersOnly === "true"}
+              type="checkbox"
+              onChange={(event) =>
+                updateSearchParams({
+                  offersOnly: event.target.checked ? "true" : null,
+                  page: null,
+                })
+              }
+            />
+            <span>Offers Only</span>
+          </label>
+        </div>
+      </section>
 
       <section className="shop-filter-section">
         <button
@@ -686,7 +727,6 @@ export function CustomerShop() {
               <div className="shop-product-grid">
                 {products.map((product) => (
                   <ShopProductCard
-                    formatPrice={formatPrice}
                     key={product.id}
                     product={product}
                   />

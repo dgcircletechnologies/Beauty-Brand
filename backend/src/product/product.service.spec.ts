@@ -93,6 +93,10 @@ describe('ProductService', () => {
       images: [],
       averageRating: 0,
       reviewCount: 0,
+      hasOffer: false,
+      effectiveOffer: null,
+      displayPrice: null,
+      displayPricing: null,
     });
 
     expect(product.findFirst).toHaveBeenCalledWith({

@@ -1,4 +1,26 @@
 import { apiRequest } from "./client";
+import type {
+  BulkCreateOfferTargetsPayload,
+  CreateOfferPayload,
+  Offer,
+  OfferListQuery,
+  OfferListResponse,
+  OfferTarget,
+  OfferTargetPayload,
+  OfferType,
+  UpdateOfferPayload,
+  UpdateOfferStatusPayload,
+} from "@/lib/offers/types";
+
+export type AdminOffer = Offer;
+export type AdminOfferListItem = OfferListResponse["items"][number];
+export type AdminOfferListResponse = OfferListResponse;
+export type AdminOfferListParams = OfferListQuery;
+export type AdminOfferTarget = OfferTarget;
+export type AdminOfferTargetPayload = OfferTargetPayload;
+export type CreateAdminOfferPayload = CreateOfferPayload;
+export type UpdateAdminOfferPayload = UpdateOfferPayload;
+export type AdminOfferType = OfferType;
 
 export type AdminCategory = {
   id: string;
@@ -610,6 +632,146 @@ function withAuth(accessToken: string) {
   };
 }
 
+function getAdminOfferQuery(params: AdminOfferListParams = {}) {
+  const queryParams = new URLSearchParams();
+
+  if (params.page) {
+    queryParams.set("page", String(params.page));
+  }
+
+  if (params.limit) {
+    queryParams.set("limit", String(params.limit));
+  }
+
+  if (params.search) {
+    queryParams.set("search", params.search);
+  }
+
+  if (params.type) {
+    queryParams.set("type", params.type);
+  }
+
+  if (params.isActive !== undefined) {
+    queryParams.set("isActive", String(params.isActive));
+  }
+
+  if (params.startAt) {
+    queryParams.set("startAt", params.startAt);
+  }
+
+  if (params.endAt) {
+    queryParams.set("endAt", params.endAt);
+  }
+
+  const query = queryParams.toString();
+
+  return query ? `?${query}` : "";
+}
+
+export function getAdminOffers(
+  accessToken: string,
+  params: AdminOfferListParams = {},
+) {
+  return apiRequest<AdminOfferListResponse>(
+    `/admin/offers${getAdminOfferQuery(params)}`,
+    {
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
+export function getAdminOffer(accessToken: string, offerId: string) {
+  return apiRequest<AdminOffer>(`/admin/offers/${offerId}`, {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function createAdminOffer(
+  accessToken: string,
+  payload: CreateAdminOfferPayload,
+) {
+  return apiRequest<AdminOffer>("/admin/offers", {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminOffer(
+  accessToken: string,
+  offerId: string,
+  payload: UpdateAdminOfferPayload,
+) {
+  return apiRequest<AdminOffer>(`/admin/offers/${offerId}`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function setAdminOfferActive(
+  accessToken: string,
+  offerId: string,
+  payload: UpdateOfferStatusPayload,
+) {
+  return apiRequest<AdminOffer>(`/admin/offers/${offerId}/status`, {
+    method: "PATCH",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAdminOffer(accessToken: string, offerId: string) {
+  return apiRequest<AdminOffer>(`/admin/offers/${offerId}`, {
+    method: "DELETE",
+    headers: withAuth(accessToken),
+  });
+}
+
+export function getAdminOfferTargets(accessToken: string, offerId: string) {
+  return apiRequest<AdminOfferTarget[]>(`/admin/offers/${offerId}/targets`, {
+    headers: withAuth(accessToken),
+  });
+}
+
+export function createAdminOfferTarget(
+  accessToken: string,
+  offerId: string,
+  payload: AdminOfferTargetPayload,
+) {
+  return apiRequest<AdminOfferTarget>(`/admin/offers/${offerId}/targets`, {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createAdminOfferTargets(
+  accessToken: string,
+  offerId: string,
+  payload: BulkCreateOfferTargetsPayload,
+) {
+  return apiRequest<AdminOfferTarget[]>(`/admin/offers/${offerId}/targets/bulk`, {
+    method: "POST",
+    headers: withAuth(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAdminOfferTarget(
+  accessToken: string,
+  offerId: string,
+  targetId: string,
+) {
+  return apiRequest<AdminOfferTarget>(
+    `/admin/offers/${offerId}/targets/${targetId}`,
+    {
+      method: "DELETE",
+      headers: withAuth(accessToken),
+    },
+  );
+}
+
 export function getAdminCategories(accessToken: string) {
   return apiRequest<AdminCategory[]>("/admin/categories", {
     headers: withAuth(accessToken),
@@ -812,6 +974,15 @@ export function createAdminProductVariant(
       method: "POST",
       headers: withAuth(accessToken),
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function getAdminProductVariants(accessToken: string, productId: string) {
+  return apiRequest<AdminProductVariant[]>(
+    `/admin/products/${productId}/variants`,
+    {
+      headers: withAuth(accessToken),
     },
   );
 }

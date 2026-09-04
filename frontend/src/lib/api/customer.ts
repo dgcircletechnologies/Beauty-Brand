@@ -2,14 +2,21 @@ import { apiRequest } from "./client";
 
 import type { AuthUser } from "@/lib/auth/types";
 import type { UserGender } from "@/lib/auth/types";
+import type {
+  BuyXGetYConfig,
+  EffectiveOffer,
+  OfferAwarePricing,
+  ResolvedOfferPricing,
+} from "@/lib/offers/types";
 
-export type CustomerProductVariant = {
+export type CustomerProductVariant = OfferAwarePricing & {
   id: string;
   sku: string;
   price: string;
-  compareAtPrice: string | null;
+  compareAtPrice?: string | null;
   stockQuantity: number;
   isActive: boolean;
+  pricing?: ResolvedOfferPricing;
   images?: CustomerProductImage[];
   attributeValues?: CustomerProductAttributeValue[];
 };
@@ -60,6 +67,11 @@ export type CustomerCategory = {
   slug: string;
   description: string | null;
   parentId: string | null;
+  offer?: {
+    hasOffer: boolean;
+    offer: EffectiveOffer | null;
+    buyXGetY: BuyXGetYConfig | null;
+  };
   images?: CustomerCategoryImage[];
 };
 
@@ -121,6 +133,10 @@ export type CustomerProduct = {
   usageInstructions?: string | null;
   warnings?: string | null;
   isFeatured: boolean;
+  hasOffer?: boolean;
+  effectiveOffer?: EffectiveOffer | null;
+  displayPrice?: string | number | null;
+  displayPricing?: ResolvedOfferPricing | null;
   averageRating?: number;
   reviewCount?: number;
   images?: CustomerProductImage[];
@@ -190,6 +206,7 @@ export type CustomerShopProductParams = {
   page?: string;
   pageSize?: string;
   excludeProductId?: string;
+  offersOnly?: string;
 };
 
 export type CustomerCurrency = {
@@ -208,8 +225,23 @@ export type CartItem = {
   quantity: number;
   baseUnitPrice: number;
   baseLineTotal: number;
+  displayUnitBasePrice?: number;
+  displayUnitDiscountAmount?: number;
   displayUnitPrice: number;
+  displayLineBaseSubtotal?: number;
+  displayLineDiscountAmount?: number;
   displayLineTotal: number;
+  pricing?: {
+    unitBasePrice: string;
+    unitDiscountAmount: string;
+    unitFinalPrice: string;
+    lineBaseSubtotal: string;
+    lineDiscountAmount: string;
+    lineFinalSubtotal: string;
+    hasOffer: boolean;
+    offer: EffectiveOffer | null;
+    buyXGetY: BuyXGetYConfig | null;
+  };
   availability: {
     status: string;
     isAvailable: boolean;
@@ -231,6 +263,43 @@ export type CartItem = {
   image: CustomerProductImage | null;
 };
 
+export type CartRewardItem = {
+  isOfferReward: true;
+  sourceOfferId: string;
+  sourceCartItemId: string;
+  variantId: string;
+  productId: string;
+  name: string;
+  quantity: number;
+  unitPrice: string;
+  discountAmount: string;
+  finalUnitPrice: string;
+  lineTotal: string;
+  displayUnitPrice: number;
+  displayLineTotal: number;
+  offer: Pick<EffectiveOffer, "id" | "name" | "type">;
+  product: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  variant: {
+    id: string;
+    sku: string;
+    stockQuantity: number;
+    isActive: boolean;
+    deletedAt: string | null;
+    attributeValues?: CustomerProductAttributeValue[];
+  };
+  image: CustomerProductImage | null;
+};
+
+export type CartRewardIssue = {
+  sourceCartItemId: string;
+  sourceOfferId: string;
+  message: string;
+};
+
 export type CustomerCart = {
   id: string;
   status: string;
@@ -240,9 +309,21 @@ export type CustomerCart = {
     decimalDigits: number;
   };
   items: CartItem[];
+  rewardItems?: CartRewardItem[];
+  rewardIssues?: CartRewardIssue[];
   itemCount: number;
   baseSubtotal: number;
   displaySubtotal: number;
+  summary?: {
+    baseSubtotal: string;
+    discountTotal: string;
+    finalSubtotal: string;
+    rewardSavings: string;
+    displayBaseSubtotal?: string;
+    displayDiscountTotal?: string;
+    displayRewardSavings?: string;
+    displayFinalSubtotal: string;
+  };
   hasUnavailableItems: boolean;
 };
 
@@ -255,10 +336,43 @@ export type CheckoutItem = {
   quantity: number;
   baseUnitPrice: number;
   baseLineTotal: number;
+  displayUnitBasePrice?: number;
+  displayUnitDiscountAmount?: number;
   displayUnitPrice: number;
+  displayLineBaseSubtotal?: number;
+  displayLineDiscountAmount?: number;
   displayLineTotal: number;
   unitPrice: number;
   lineTotal: number;
+  pricing?: {
+    unitBasePrice: string;
+    unitDiscountAmount: string;
+    unitFinalPrice: string;
+    lineBaseSubtotal: string;
+    lineDiscountAmount: string;
+    lineFinalSubtotal: string;
+    hasOffer: boolean;
+    offer: EffectiveOffer | null;
+    buyXGetY: BuyXGetYConfig | null;
+  };
+};
+
+export type CheckoutRewardItem = {
+  isOfferReward: true;
+  sourceOfferId: string;
+  sourceCartItemId?: string;
+  productId: string;
+  variantId: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: string;
+  discountAmount: string;
+  finalUnitPrice: string;
+  lineTotal: string;
+  displayUnitPrice: number;
+  displayLineTotal: number;
+  offer: EffectiveOffer | null;
 };
 
 export type CheckoutShippingRate = {
@@ -292,15 +406,20 @@ export type CheckoutPreview = {
   };
   exchangeRate: number;
   items: CheckoutItem[];
+  rewardItems?: CheckoutRewardItem[];
   itemCount: number;
   baseSubtotal: number;
   displaySubtotal: number;
   subtotal: number;
+  displayPreDiscountSubtotal?: number;
   baseShippingAmount: number;
   displayShippingAmount: number;
   shippingAmount: number;
   taxAmount: number;
   discountAmount: number;
+  displayDiscountAmount?: number;
+  rewardSavings?: number;
+  displayRewardSavings?: number;
   baseTotalAmount: number;
   displayTotalAmount: number;
   totalAmount: number;
@@ -343,16 +462,19 @@ export type CustomerOrder = {
   shippingAmount: number;
   taxAmount: number;
   discountAmount: number;
+  rewardSavings?: number;
   totalAmount: number;
   baseSubtotal: number;
   baseShippingAmount: number;
   baseTaxAmount: number;
   baseDiscountAmount: number;
+  baseRewardSavings?: number;
   baseTotalAmount: number;
   displaySubtotal: number;
   displayShippingAmount: number;
   displayTaxAmount: number;
   displayDiscountAmount: number;
+  displayRewardSavings?: number;
   displayTotalAmount: number;
   shippingMethodName: string | null;
   shippingServiceCode: string | null;
@@ -375,11 +497,25 @@ export type CustomerOrder = {
     sku: string;
     quantity: number;
     baseUnitPrice: number;
+    unitDiscountAmount?: number;
+    finalUnitPrice?: number;
     baseLineTotal: number;
+    lineBaseSubtotal?: number;
+    lineDiscountAmount?: number;
+    lineFinalSubtotal?: number;
+    displayBaseUnitPrice?: number;
+    displayUnitDiscountAmount?: number;
+    displayLineBaseSubtotal?: number;
+    displayLineDiscountAmount?: number;
     displayUnitPrice: number;
     displayLineTotal: number;
     unitPrice: number;
+    discountAmount?: number;
     lineTotal: number;
+    offer?: EffectiveOffer | null;
+    isOfferReward?: boolean;
+    sourceOfferId?: string | null;
+    sourceOrderItemId?: string | null;
     image: CustomerProductImage | null;
   }[];
   addresses: {
@@ -553,6 +689,10 @@ export function getCustomerShopProducts(options: CustomerShopProductParams = {})
     params.set("excludeProductId", options.excludeProductId);
   }
 
+  if (options.offersOnly) {
+    params.set("offersOnly", options.offersOnly);
+  }
+
   const query = params.toString();
 
   return apiRequest<CustomerShopProductsResponse>(
@@ -562,6 +702,16 @@ export function getCustomerShopProducts(options: CustomerShopProductParams = {})
 
 export async function getCustomerProducts() {
   const response = await getCustomerShopProducts();
+
+  return response.items;
+}
+
+export async function getCustomerOfferProducts(limit = 10) {
+  const response = await getCustomerShopProducts({
+    offersOnly: "true",
+    page: "1",
+    pageSize: String(limit),
+  });
 
   return response.items;
 }
@@ -802,14 +952,10 @@ export function changePassword(
   });
 }
 
-export function getAccountSessions(
-  accessToken: string,
-  refreshToken: string,
-) {
+export function getAccountSessions(accessToken: string) {
   return apiRequest<AccountSessions>("/account/sessions", {
     method: "POST",
     headers: withAuth(accessToken),
-    body: JSON.stringify({ refreshToken }),
   });
 }
 

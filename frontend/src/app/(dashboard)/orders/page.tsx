@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import { UserShell } from "@/components/customer/user-shell";
 import { useAuth } from "@/contexts/auth-context";
-import { useCurrency } from "@/contexts/currency-context";
 import * as customerApi from "@/lib/api/customer";
 
 const pageSize = 10;
@@ -98,9 +97,23 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatOrderMoney(
+  amount: number | string,
+  currency: customerApi.CustomerOrder["displayCurrency"],
+) {
+  const value = Number(amount);
+
+  if (!Number.isFinite(value)) {
+    return `${currency.symbol ?? currency.code}0`;
+  }
+
+  return `${currency.symbol ?? currency.code}${value.toFixed(
+    currency.decimalDigits,
+  )}`;
+}
+
 export default function OrdersPage() {
   const { accessToken } = useAuth();
-  const { formatPrice } = useCurrency();
   const [response, setResponse] =
     useState<customerApi.CustomerOrdersResponse | null>(null);
   const [page, setPage] = useState(1);
@@ -307,7 +320,12 @@ export default function OrdersPage() {
                           <p>
                             {item.variantLabel ?? item.sku} - Qty {item.quantity}
                           </p>
-                          <strong>{formatPrice(item.displayLineTotal)}</strong>
+                          <strong>
+                            {formatOrderMoney(
+                              item.displayLineTotal,
+                              order.displayCurrency,
+                            )}
+                          </strong>
                         </div>
                         <div className="customer-order-item-actions">
                           <Link href="/shop">Shop similar</Link>

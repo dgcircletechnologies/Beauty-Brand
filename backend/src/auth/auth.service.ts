@@ -20,8 +20,6 @@ import {
 } from '../common/interfaces/jwt-payload.interface';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
-import { LogoutDto } from './dto/logout.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -122,6 +120,7 @@ export class AuthService {
       role: user.role,
     });
 
+    const sessionId = this.generatePlainToken();
     const refreshToken = await this.generateRefreshToken({
       id: user.id,
     });
@@ -129,8 +128,10 @@ export class AuthService {
     await this.prisma.$transaction(async (tx) => {
       await tx.refreshToken.create({
         data: {
+          sessionId,
           userId: user.id,
-          tokenHash: this.hashRefreshToken(refreshToken),
+          tokenHash: this.hashRefreshToken(refreshToken.token),
+          jti: refreshToken.jti,
           expiresAt: this.getRefreshTokenExpiryDate(),
           ...this.getSessionMetadata(request),
         },
@@ -158,18 +159,18 @@ export class AuthService {
         emailVerifiedAt: user.emailVerifiedAt,
       },
       accessToken,
-      refreshToken,
+      refreshToken: refreshToken.token,
     };
   }
 
-  async refresh(userId: string, dto: RefreshTokenDto, request?: Request) {
-    const payload = await this.verifyRefreshToken(dto.refreshToken);
+  async refresh(userId: string, refreshToken: string, request?: Request) {
+    const payload = await this.verifyRefreshToken(refreshToken);
 
     if (payload.type !== 'refresh') {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const tokenHash = this.hashRefreshToken(dto.refreshToken);
+    const tokenHash = this.hashRefreshToken(refreshToken);
 
     const storedToken = await this.prisma.refreshToken.findUnique({
       where: {
@@ -180,14 +181,7 @@ export class AuthService {
       },
     });
 
-    if (
-      !storedToken ||
-      storedToken.userId !== payload.sub ||
-      storedToken.userId !== userId ||
-      storedToken.revokedAt ||
-      storedToken.expiresAt <= new Date() ||
-      storedToken.user.deletedAt
-    ) {
+    if (!storedToken) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
@@ -195,29 +189,100 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    if (
+      storedToken.userId !== payload.sub ||
+      storedToken.userId !== userId ||
+      storedToken.expiresAt <= new Date() ||
+      storedToken.user.deletedAt
+    ) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (
+      storedToken.revokedAt ||
+      storedToken.replacedAt ||
+      storedToken.reusedAt
+    ) {
+      await this.revokeRefreshTokenSessionForReuse(storedToken);
+      throw new UnauthorizedException('Refresh token reuse detected');
+    }
+
+    const nextRefreshToken = await this.generateRefreshToken({
+      id: storedToken.user.id,
+    });
     const accessToken = await this.generateAccessToken({
       id: storedToken.user.id,
       email: storedToken.user.email,
       role: storedToken.user.role,
     });
+    const now = new Date();
+    const sessionMetadata = this.getSessionMetadata(request);
 
-    await this.prisma.refreshToken.update({
-      where: {
-        id: storedToken.id,
-      },
-      data: {
-        ...this.getSessionMetadata(request),
-      },
-    });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const nextToken = await tx.refreshToken.create({
+          data: {
+            sessionId: storedToken.sessionId,
+            userId: storedToken.userId,
+            tokenHash: this.hashRefreshToken(nextRefreshToken.token),
+            jti: nextRefreshToken.jti,
+            expiresAt: this.getRefreshTokenExpiryDate(),
+            ...sessionMetadata,
+          },
+        });
+
+        const rotationResult = await tx.refreshToken.updateMany({
+          where: {
+            id: storedToken.id,
+            revokedAt: null,
+            replacedAt: null,
+            reusedAt: null,
+          },
+          data: {
+            revokedAt: now,
+            replacedAt: now,
+            replacedByTokenId: nextToken.id,
+            ...sessionMetadata,
+          },
+        });
+
+        if (rotationResult.count !== 1) {
+          throw new UnauthorizedException('Refresh token reuse detected');
+        }
+      });
+    } catch (error) {
+      if (
+        error instanceof UnauthorizedException &&
+        error.message === 'Refresh token reuse detected'
+      ) {
+        await this.revokeRefreshTokenSessionForReuse(storedToken);
+      }
+
+      throw error;
+    }
+
+    void this.deleteStaleRefreshTokens();
 
     return {
+      user: {
+        id: storedToken.user.id,
+        firstName: storedToken.user.firstName,
+        lastName: storedToken.user.lastName,
+        email: storedToken.user.email,
+        phone: storedToken.user.phone,
+        gender: storedToken.user.gender,
+        age: storedToken.user.age,
+        role: storedToken.user.role,
+        status: storedToken.user.status,
+        emailVerifiedAt: storedToken.user.emailVerifiedAt,
+      },
       accessToken,
-      refreshToken: dto.refreshToken,
+      refreshToken: nextRefreshToken.token,
     };
   }
 
-  async logout(userId: string, dto: LogoutDto) {
-    const tokenHash = this.hashRefreshToken(dto.refreshToken);
+  async logout(userId: string, refreshToken: string) {
+    const tokenHash = this.hashRefreshToken(refreshToken);
 
     const result = await this.prisma.refreshToken.deleteMany({
       where: {
@@ -456,16 +521,25 @@ export class AuthService {
     });
   }
 
-  private async generateRefreshToken(user: { id: string }): Promise<string> {
+  private async generateRefreshToken(user: {
+    id: string;
+  }): Promise<{ token: string; jti: string }> {
+    const jti = this.generatePlainToken();
     const payload: RefreshTokenPayload = {
       sub: user.id,
+      jti,
       type: 'refresh',
     };
 
-    return this.jwtService.signAsync(payload, {
+    const token = await this.jwtService.signAsync(payload, {
       secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       expiresIn: this.getRefreshTokenLifetime(),
     });
+
+    return {
+      token,
+      jti,
+    };
   }
 
   private async verifyRefreshToken(
@@ -499,6 +573,64 @@ export class AuthService {
 
   private generatePlainToken(): string {
     return randomBytes(32).toString('base64url');
+  }
+
+  private async revokeRefreshTokenSessionForReuse(token: {
+    id: string;
+    userId: string;
+    sessionId: string;
+  }) {
+    const now = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.update({
+        where: {
+          id: token.id,
+        },
+        data: {
+          reusedAt: now,
+          revokedAt: now,
+        },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: {
+          userId: token.userId,
+          sessionId: token.sessionId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: now,
+        },
+      }),
+    ]);
+  }
+
+  private async deleteStaleRefreshTokens() {
+    const retentionDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.refreshToken
+      .deleteMany({
+        where: {
+          OR: [
+            {
+              expiresAt: {
+                lt: retentionDate,
+              },
+            },
+            {
+              revokedAt: {
+                lt: retentionDate,
+              },
+            },
+            {
+              replacedAt: {
+                lt: retentionDate,
+              },
+            },
+          ],
+        },
+      })
+      .catch(() => undefined);
   }
 
   private safeHashCompare(left: string, right: string): boolean {
@@ -576,28 +708,31 @@ export class AuthService {
       return null;
     }
 
-    const browser =
-      userAgent.includes('Edg/')
-        ? 'Microsoft Edge'
-        : userAgent.includes('Chrome/')
-          ? 'Chrome'
-          : userAgent.includes('Firefox/')
-            ? 'Firefox'
-            : userAgent.includes('Safari/')
-              ? 'Safari'
-              : 'Browser';
-    const platform =
-      userAgent.includes('Windows')
-        ? 'Windows'
-        : userAgent.includes('Macintosh')
-          ? 'macOS'
-          : userAgent.includes('Android')
-            ? 'Android'
-            : userAgent.includes('iPhone') || userAgent.includes('iPad')
-              ? 'iOS'
-              : userAgent.includes('Linux')
-                ? 'Linux'
-                : null;
+    let browser = 'Browser';
+
+    if (userAgent.includes('Edg/')) {
+      browser = 'Microsoft Edge';
+    } else if (userAgent.includes('Chrome/')) {
+      browser = 'Chrome';
+    } else if (userAgent.includes('Firefox/')) {
+      browser = 'Firefox';
+    } else if (userAgent.includes('Safari/')) {
+      browser = 'Safari';
+    }
+
+    let platform: string | null = null;
+
+    if (userAgent.includes('Windows')) {
+      platform = 'Windows';
+    } else if (userAgent.includes('Macintosh')) {
+      platform = 'macOS';
+    } else if (userAgent.includes('Android')) {
+      platform = 'Android';
+    } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+      platform = 'iOS';
+    } else if (userAgent.includes('Linux')) {
+      platform = 'Linux';
+    }
 
     return platform ? `${browser} on ${platform}` : browser;
   }
