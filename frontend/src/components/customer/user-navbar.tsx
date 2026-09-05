@@ -149,7 +149,9 @@ export function UserNavbar() {
 
     async function loadCategories() {
       try {
-        const nextCategories = await customerApi.getCustomerCategories();
+        const nextCategories = await customerApi.getCustomerCategories({
+          sort: "offers-first",
+        });
 
         if (isMounted) {
           setCategories(nextCategories);
@@ -291,6 +293,7 @@ export function UserNavbar() {
             <Link className={pathname === "/" ? "active" : undefined} href="/">
               Home
             </Link>
+            <Link href="/shop">Shop</Link>
             <div className="explore-menu">
               <button
                 className="explore-trigger"
@@ -416,9 +419,8 @@ export function UserNavbar() {
                 </div>
               ) : null}
             </div>
+            <Link href="/shop?offersOnly=true">Offers</Link>
             <Link href="/categories">Categories</Link>
-            <Link href="/shop">Shop</Link>
-            <Link href="/checkout">Checkout</Link>
           </div>
 
           <div className="user-nav-actions">
@@ -565,6 +567,9 @@ export function UserNavbar() {
                   <Link href="/" onClick={closeMenus}>
                     Home
                   </Link>
+                  <Link href="/shop" onClick={closeMenus}>
+                    Shop
+                  </Link>
                   <button
                     className="mobile-explore-trigger"
                     type="button"
@@ -587,11 +592,8 @@ export function UserNavbar() {
                       rootCategories={rootCategories}
                     />
                   ) : null}
-                  <Link href="/shop" onClick={closeMenus}>
-                    Shop
-                  </Link>
-                  <Link href="/checkout" onClick={closeMenus}>
-                    Checkout
+                  <Link href="/shop?offersOnly=true" onClick={closeMenus}>
+                    Offers
                   </Link>
                 </div>
               </div>

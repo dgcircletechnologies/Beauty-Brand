@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import { CategoryService } from '../category.service';
@@ -9,8 +9,8 @@ export class CategoryPublicController {
 
   @Get()
   @ResponseMessage('Categories fetched successfully')
-  findPublicCategories() {
-    return this.categoryService.findPublicCategories();
+  findPublicCategories(@Query('sort') sort?: string) {
+    return this.categoryService.findPublicCategories({ sort });
   }
 
   @Get(':slug/products')

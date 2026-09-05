@@ -732,8 +732,18 @@ export function submitProductReview(
   });
 }
 
-export function getCustomerCategories() {
-  return apiRequest<CustomerCategory[]>("/categories");
+export function getCustomerCategories(options: { sort?: string } = {}) {
+  const params = new URLSearchParams();
+
+  if (options.sort) {
+    params.set("sort", options.sort);
+  }
+
+  const query = params.toString();
+
+  return apiRequest<CustomerCategory[]>(
+    `/categories${query ? `?${query}` : ""}`,
+  );
 }
 
 export function getCustomerCategory(slug: string) {

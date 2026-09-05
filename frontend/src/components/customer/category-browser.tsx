@@ -124,7 +124,9 @@ export function HomeCategorySection() {
 
     async function loadCategories() {
       try {
-        const nextCategories = await customerApi.getCustomerCategories();
+        const nextCategories = await customerApi.getCustomerCategories({
+          sort: "offers-first",
+        });
 
         if (isMounted) {
           setCategories(nextCategories);
@@ -235,7 +237,9 @@ export function CategoryIndex() {
 
     async function loadCategories() {
       try {
-        const nextCategories = await customerApi.getCustomerCategories();
+        const nextCategories = await customerApi.getCustomerCategories({
+          sort: "offers-first",
+        });
 
         if (isMounted) {
           setCategories(nextCategories);
@@ -311,7 +315,7 @@ export function CategoryDrilldown({ slug }: { slug: string }) {
       try {
         const [nextCategory, nextCategories] = await Promise.all([
           customerApi.getCustomerCategory(slug),
-          customerApi.getCustomerCategories(),
+          customerApi.getCustomerCategories({ sort: "offers-first" }),
         ]);
 
         if (isMounted) {

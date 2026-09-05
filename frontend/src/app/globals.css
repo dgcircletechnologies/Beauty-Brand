@@ -1845,8 +1845,13 @@ p {
   color: #18181b;
 }
 
-.customer-category-card img,
-.customer-category-card > span {
+.customer-category-media {
+  position: relative;
+  overflow: hidden;
+}
+
+.customer-category-media img,
+.customer-category-media > span:not(.offer-badge) {
   width: 100%;
   aspect-ratio: 4 / 5;
   display: grid;
@@ -4801,6 +4806,7 @@ p {
 
 .admin-layout {
   height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   overflow: hidden;
@@ -4815,11 +4821,12 @@ p {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   border-right: 1px solid var(--line);
   padding: 24px;
@@ -4827,6 +4834,7 @@ p {
 }
 
 .admin-sidebar-top {
+  flex-shrink: 0;
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -4857,9 +4865,14 @@ p {
 }
 
 .admin-nav {
+  flex: 1;
   min-height: 0;
   display: grid;
+  align-content: start;
   gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
 }
 
 .admin-nav a,
@@ -4931,9 +4944,9 @@ p {
 }
 
 .admin-user {
+  flex-shrink: 0;
   display: grid;
   gap: 12px;
-  margin-top: auto;
 }
 
 .admin-user p {
@@ -8483,15 +8496,17 @@ button.attribute-view-select {
 
 @media (max-width: 920px) {
   .admin-layout {
-    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
     grid-template-columns: 1fr;
     overflow: visible;
   }
 
   .admin-sidebar {
     position: static;
-    height: auto;
-    overflow: visible;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .admin-content {

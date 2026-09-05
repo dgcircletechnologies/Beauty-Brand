@@ -140,7 +140,7 @@ export class CategoryService {
     };
   }
 
-  async findPublicCategories() {
+  async findPublicCategories(query: { sort?: string } = {}) {
     const categories = await this.prisma.category.findMany({
       where: {
         deletedAt: null,
@@ -171,7 +171,7 @@ export class CategoryService {
       },
     });
 
-    return Promise.all(
+    const categoriesWithOffers = await Promise.all(
       categories.map(async (category) => ({
         ...category,
         offer: mapResolvedCategoryOffer(
@@ -179,6 +179,21 @@ export class CategoryService {
         ),
       })),
     );
+
+    if (query.sort === 'offers-first') {
+      return categoriesWithOffers.sort((first, second) => {
+        const offerPriority =
+          Number(second.offer?.hasOffer) - Number(first.offer?.hasOffer);
+
+        if (offerPriority !== 0) {
+          return offerPriority;
+        }
+
+        return first.name.localeCompare(second.name);
+      });
+    }
+
+    return categoriesWithOffers;
   }
 
   async findPublicBySlug(slug: string) {

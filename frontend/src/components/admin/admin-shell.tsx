@@ -206,6 +206,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const isOrdersActive = pathname.startsWith("/admin/orders");
   const isPaymentsActive = pathname.startsWith("/admin/payments");
   const isOffersActive = pathname.startsWith("/admin/offers");
+  const isProfileActive = pathname.startsWith("/admin/profile");
 
   return (
     <div
@@ -238,6 +239,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           >
             <ChartIcon />
             <span>Analytics</span>
+          </Link>
+
+          <Link
+            aria-current={isProfileActive ? "page" : undefined}
+            className={isProfileActive ? "active nav-link" : "nav-link"}
+            href="/admin/profile"
+          >
+            <UserIcon />
+            <span>Profile</span>
           </Link>
 
           <div className={`nav-group ${isCurrenciesActive ? "active" : ""}`}>
@@ -622,6 +632,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="admin-user">
           <p>{user?.email}</p>
+          <Link className="secondary-button" href="/admin/profile">
+            Profile
+          </Link>
           <button className="secondary-button" type="button" onClick={logout}>
             Logout
           </button>
@@ -839,6 +852,30 @@ function TagIcon() {
         stroke="currentColor"
         strokeLinecap="round"
         strokeWidth="3"
+      />
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path
+        d="M20 21A8 8 0 0 0 4 21"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M12 13A5 5 0 1 0 12 3A5 5 0 0 0 12 13Z"
+        stroke="currentColor"
+        strokeWidth="2"
       />
     </svg>
   );

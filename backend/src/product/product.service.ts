@@ -141,7 +141,7 @@ export class ProductService {
     const pageSize = Math.min(this.getPositiveInteger(query.pageSize, 12), 48);
     const selectedFilters = this.getPublicProductFilters(query);
     const shouldShowOffersOnly = this.parseBoolean(query.offersOnly);
-    const sort = query.sort ?? 'offers-first';
+    const sort = query.sort ?? 'featured';
     const needsOfferPricingBeforePagination =
       shouldShowOffersOnly || sort === 'offers-first';
     const products = await this.prisma.product.findMany({
@@ -554,7 +554,7 @@ export class ProductService {
       createdAt: Date;
       averageRating: unknown;
     },
-  >(products: T[], sort = 'offers-first') {
+  >(products: T[], sort = 'featured') {
     const priceOf = (product: T) => Number(product.variants?.[0]?.price ?? 0);
 
     return [...products].sort((first, second) => {

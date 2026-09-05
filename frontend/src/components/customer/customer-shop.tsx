@@ -373,7 +373,7 @@ export function CustomerShop() {
       tag: readList(searchParams, "tag"),
       minPrice: searchParams.get("minPrice") ?? "",
       maxPrice: searchParams.get("maxPrice") ?? "",
-      sort: searchParams.get("sort") ?? "offers-first",
+      sort: searchParams.get("sort") ?? "featured",
       page: searchParams.get("page") ?? "1",
       pageSize: "12",
       offersOnly: searchParams.get("offersOnly") === "true" ? "true" : "",

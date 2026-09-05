@@ -18,7 +18,10 @@ import { CustomerAccountController } from './customer/customer-account.controlle
 export class AccountModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(AccessTokenMiddleware, allowRoles(UserRole.CUSTOMER))
+      .apply(
+        AccessTokenMiddleware,
+        allowRoles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.SUPER_ADMIN),
+      )
       .forRoutes(CustomerAccountController);
   }
 }

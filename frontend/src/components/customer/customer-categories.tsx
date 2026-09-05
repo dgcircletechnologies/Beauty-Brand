@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { OfferBadge } from "@/components/customer/offer-badge";
 import * as customerApi from "@/lib/api/customer";
 
 export function CustomerCategories() {
@@ -17,7 +18,9 @@ export function CustomerCategories() {
 
     async function loadCategories() {
       try {
-        const nextCategories = await customerApi.getCustomerCategories();
+        const nextCategories = await customerApi.getCustomerCategories({
+          sort: "offers-first",
+        });
 
         if (isMounted) {
           setCategories(nextCategories);
@@ -77,11 +80,20 @@ export function CustomerCategories() {
                 href={`/shop?category=${category.slug}`}
                 key={category.id}
               >
-                {image ? (
-                  <img alt={image.altText ?? category.name} src={image.url} />
-                ) : (
-                  <span>{category.name.slice(0, 1)}</span>
-                )}
+                <span className="customer-category-media">
+                  {image ? (
+                    <img alt={image.altText ?? category.name} src={image.url} />
+                  ) : (
+                    <span>{category.name.slice(0, 1)}</span>
+                  )}
+                  {category.offer?.hasOffer ? (
+                    <OfferBadge
+                      className="product-card-offer-badge"
+                      offer={category.offer.offer}
+                      buyXGetY={category.offer.buyXGetY}
+                    />
+                  ) : null}
+                </span>
                 <strong>{category.name}</strong>
                 {category.description ? <p>{category.description}</p> : null}
               </Link>
